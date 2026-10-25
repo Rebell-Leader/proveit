@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Third-party report text and the curl checkout are fetched, not committed.
+data/cache/
+vendor/
+runs/

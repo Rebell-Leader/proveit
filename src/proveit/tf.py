@@ -19,7 +19,7 @@ DEFAULT_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 
 
 def model_fast() -> str:
-    return os.environ.get("PROVEIT_MODEL_FAST", "nvidia/Nemotron-3-Nano-30B-A3B")
+    return os.environ.get("PROVEIT_MODEL_FAST", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B")
 
 
 def model_deep() -> str:

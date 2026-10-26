@@ -31,7 +31,12 @@ def cmd_smoke(_: argparse.Namespace) -> int:
             )
             print(f"{model}: {c.data} ({c.prompt_tokens}+{c.completion_tokens} tokens, {c.seconds:.1f}s)")
         except Exception as e:  # report every model, keep going
-            print(f"{model}: FAILED {type(e).__name__}: {e}")
+            if getattr(e, "status_code", None) == 402:
+                print(f"{model}: no credits on this account. Redeem a Token Factory promo code or add funds, then retry.")
+            elif getattr(e, "status_code", None) == 404:
+                print(f"{model}: not found. Set PROVEIT_MODEL_FAST / PROVEIT_MODEL_DEEP in .env to an ID listed above.")
+            else:
+                print(f"{model}: FAILED {type(e).__name__}: {e}")
     return 0
 
 

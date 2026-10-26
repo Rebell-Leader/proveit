@@ -109,6 +109,13 @@ def cmd_triage_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export_demo(_: argparse.Namespace) -> int:
+    from proveit.web.demo import export
+
+    print(json.dumps(export(), indent=2))
+    return 0
+
+
 def cmd_eval(args: argparse.Namespace) -> int:
     from proveit.grounding import evaluate
 
@@ -140,6 +147,7 @@ def main() -> None:
     te.add_argument("--name", default=None, help="run name under runs/triage/")
     te.add_argument("--workers", type=int, default=6)
     te.set_defaults(fn=cmd_triage_eval)
+    sub.add_parser("export-demo", help="write judge-mode data for the web app to data/demo/").set_defaults(fn=cmd_export_demo)
     e = sub.add_parser("eval", help="run the grounding checker over the dataset")
     e.add_argument("--out", default="runs/grounding")
     e.set_defaults(fn=cmd_eval)

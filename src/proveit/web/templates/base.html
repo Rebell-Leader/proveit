@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ProveIt: is this bug report real?{% endblock %}</title>
+  <meta name="description" content="ProveIt checks AI-generated security reports against the real source code before a maintainer spends an hour on them. Built on NVIDIA Nemotron via Nebius Token Factory.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;550;600;650;750&family=JetBrains+Mono:wght@400;650&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1b18'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' stroke='%23f8f7f4' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="/"><span class="brand-mark">✓</span>ProveIt</a>
+      <nav class="nav">
+        <a href="/" class="{{ 'active' if request.url.path == '/' }}">Reports</a>
+        <a href="/live" class="{{ 'active' if request.url.path == '/live' }}">Try it live</a>
+        <a href="/results" class="{{ 'active' if request.url.path == '/results' }}">Results</a>
+        <a class="gh" href="https://github.com/Rebell-Leader/proveit">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <div class="wrap">
+      <span>Models: NVIDIA Nemotron 3 Nano and Ultra on Nebius Token Factory. Docs lookups: Tavily.</span>
+      <span>Data: curl's public HackerOne reports. Apache-2.0.</span>
+    </div>
+  </footer>
+  <script src="/static/app.js" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

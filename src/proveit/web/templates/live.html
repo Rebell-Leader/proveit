@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Try a report live · ProveIt{% endblock %}
+{% block content %}
+<section class="hero" style="padding-bottom:10px">
+  <div class="eyebrow">Live mode</div>
+  <h1 style="font-size:clamp(26px,4vw,38px)">Check a curl security report now</h1>
+  <p class="lead">Give a public HackerOne report URL, or paste a report. ProveIt checks it against curl's current source and
+    streams each stage as it runs. A run takes 15 to 60 seconds and calls NVIDIA Nemotron on Nebius Token Factory.</p>
+</section>
+
+<div class="panel live-form">
+  <div class="tabs" role="tablist">
+    <button type="button" class="on" data-tab="url">HackerOne URL</button>
+    <button type="button" data-tab="text">Paste a report</button>
+  </div>
+  <div data-pane="url">
+    <input type="url" id="url" placeholder="https://hackerone.com/reports/…" autocomplete="off">
+    <p class="note">Reports already in judge mode open instantly from the saved results.</p>
+  </div>
+  <div data-pane="text" class="hidden">
+    <input type="text" id="title" placeholder="Title" style="margin-bottom:8px">
+    <textarea id="body" placeholder="Report text, as the reporter wrote it (markdown is fine)"></textarea>
+    <div class="examples">Try:
+      <button type="button" data-example="fake">a report with an invented function</button>
+      <button type="button" data-example="injection">a prompt-injection attempt</button>
+    </div>
+  </div>
+  <div><button class="btn primary" id="run">Check this report</button>
+    <span class="note" style="margin-left:10px">Live runs today: ${{ '%.2f' % budget.spent_today }} of ${{ '%.2f' % budget.daily_budget }} budget used.</span></div>
+  <div id="error" class="error hidden"></div>
+</div>
+
+<div id="progress" class="hidden" style="margin-top:18px">
+  <h2 class="report-title" id="live-title" style="font-size:22px"></h2>
+  <div class="timeline">
+    <div class="tl pending" data-stage="grounding"><div class="k">1 · Grounding</div><div class="v">no model</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="claims"><div class="k">2 · Claims</div><div class="v">Nemotron 3 Nano</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="evidence"><div class="k">3 · Evidence</div><div class="v">git + Tavily</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="judgment"><div class="k">4 · Judgment</div><div class="v">Nemotron 3 Ultra</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="receipts"><div class="k">5 · Receipts</div><div class="v">no model</div><div class="d"></div></div>
+  </div>
+</div>
+<div id="result"></div>
+{% endblock %}
+{% block scripts %}<script src="/static/live.js" defer></script>{% endblock %}

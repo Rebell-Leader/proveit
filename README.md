@@ -7,9 +7,8 @@ maintainers. ProveIt reads a report, pins every file, line, function, commit, ve
 repository at the revision the report targets, and tells the maintainer what checks out and what does not.
 It is built on NVIDIA Nemotron models served by Nebius Token Factory.
 
-> Status: day 2 of 5 (Nebius x NVIDIA Global AI Hackathon). Grounding, the Nemotron judgment stage and the
-> evaluation work end to end from the command line, with held-out results below. The web app and sandbox
-> reproduction come next.
+> Status: day 3 of 5 (Nebius x NVIDIA Global AI Hackathon). The pipeline, held-out evaluation and web app work.
+> Deployment and the demo video come next.
 
 ## How it works
 
@@ -75,6 +74,19 @@ cites real functions and lies about them. That is why the Nemotron stage exists.
 dev-v1's false alarms came from judging code that had changed after the release the reporter read; dev-v2 fixed that
 by showing the release version of each changed function with the commits in between.
 
+## Web app
+
+- **Judge mode:** all 197 evaluated curl reports, each with ProveIt's verdict next to curl's actual outcome, the
+  claims, the real code with the cited lines highlighted, and the draft reply. Precomputed, so it costs nothing to serve.
+- **Live mode:** paste a public HackerOne URL or a report and watch the five stages stream in. Guarded for an unattended
+  public demo: a worst-case cost is reserved per run, at most 2 runs at once, a daily dollar cap, a per-visitor limit,
+  and size limits on everything read.
+
+```bash
+uv run uvicorn proveit.web.app:app --port 8000      # http://localhost:8000
+docker build -t proveit . && docker run -p 7860:7860 -e NEBIUS_API_KEY=... -e TAVILY_API_KEY=... proveit
+```
+
 ## Setup
 
 ```bash
@@ -88,6 +100,7 @@ uv run proveit ground 2887487     # one report's grounding findings as JSON
 uv run proveit triage 2887487     # full triage: grounding, Nano claims, evidence, Ultra judgment, receipts
 uv run proveit triage-eval --split dev   # full triage over a split, scored (responses are cached on disk)
 uv run proveit adversarial        # red-team reports (prompt injection, fake quotes...) through the real pipeline
+uv run proveit export-demo        # rebuild the web app's judge-mode data from runs/triage/
 uv run pytest
 ```
 

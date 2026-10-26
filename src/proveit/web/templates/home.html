@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div class="eyebrow">For open-source maintainers</div>
+  <h1>Is this bug report real? Check it against the code before you spend an hour on it.</h1>
+  <p class="lead">
+    In January 2026 curl ended its bug bounty under a flood of AI-generated security reports.
+    ProveIt reads a report, pulls the real source code it talks about, and has NVIDIA Nemotron rule on every
+    claim with line-by-line receipts. It never closes a report; it tells you where to look and drafts the reply.
+  </p>
+  <div class="cta">
+    <a class="btn primary" href="/r/2887487">See it on an AI-slop report</a>
+    <a class="btn" href="/r/4099618">See it on a real CVE</a>
+    <a class="btn" href="/live">Try a report live</a>
+  </div>
+
+  <div class="stats" aria-label="Results on held-out reports">
+    <div class="stat"><b>0 / {{ test.n_slop }}</b><span>AI-slop reports called valid</span></div>
+    <div class="stat"><b>{{ test.slop_flagged_or_policy }} / {{ test.n_slop }}</b><span>slop deprioritized or sent to a policy check</span></div>
+    <div class="stat"><b>{{ test.valid_confirmed }} / {{ test.n_valid }}</b><span>real CVE reports confirmed with cited code</span></div>
+    <div class="stat"><b>{{ test.valid_flagged }} / {{ test.n_valid }}</b><span>real CVE reports wrongly deprioritized</span></div>
+  </div>
+  <p class="note">Held-out test split of curl's own HackerOne reports, run once after development. About $0.017 per report. <a href="/results">Method and all numbers</a>.</p>
+</section>
+
+<section class="section">
+  <h2>Five stages, and which model does what</h2>
+  <p>Deterministic code decides what it can. Models handle what code cannot, and every verdict has to show its receipts.</p>
+  <div class="pipeline">
+    <div class="stage"><h3>Grounding</h3><div class="who">No model</div><p>Every file, line, function, commit, quote and version the report cites is checked against curl at the revision it targets.</p></div>
+    <div class="stage"><h3>Claims</h3><div class="who">Nemotron 3 Nano · reasoning off</div><p>Turns the report into checkable claims: the flaw, how an attacker triggers it, what it does.</p></div>
+    <div class="stage"><h3>Evidence</h3><div class="who">git + Tavily</div><p>Pulls the real functions, line-numbered, plus the release version when master has changed. Tavily fetches dependency docs the report quotes.</p></div>
+    <div class="stage"><h3>Judgment</h3><div class="who">Nemotron 3 Ultra · reasoning on</div><p>Rules on each claim against the code it was shown, applying curl's own policy on what is not a security issue.</p></div>
+    <div class="stage"><h3>Receipts</h3><div class="who">No model</div><p>Citations must point at code the judge saw, quotes must be verbatim. A verdict without receipts becomes "needs a human".</p></div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Start here</h2>
+  <p>Five reports that show what ProveIt does, good and bad.</p>
+  <table class="table">
+    <tbody>
+      {% for f in featured %}
+        <tr>
+          <td style="width:34%"><b>{{ f.headline }}</b><div class="note">{{ f.text }}</div></td>
+          <td class="title"><a href="/r/{{ f.id }}">{{ f.title }}</a></td>
+          <td><span class="chip {{ f.tone }}"><span class="dot"></span>{{ f.final_label }}</span></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="section" id="reports">
+  <h2>All {{ total }} curl reports</h2>
+  <p>Every report curl's maintainer listed as AI slop, and every HackerOne report behind a published curl CVE. Each was triaged without seeing its outcome.</p>
+  <div class="filters">
+    <a href="/?show=all#reports" class="{{ 'on' if show == 'all' }}">All</a>
+    <a href="/?show=slop#reports" class="{{ 'on' if show == 'slop' }}">AI slop</a>
+    <a href="/?show=valid#reports" class="{{ 'on' if show == 'valid' }}">Real CVEs</a>
+    <span style="width:12px"></span>
+    {% for key, (label, tone, _) in VERDICTS.items() if key != 'error' %}
+      <a href="/?show={{ show }}&verdict={{ key }}#reports" class="{{ 'on' if verdict == key }}">{{ label }}</a>
+    {% endfor %}
+    {% if verdict != 'all' %}<a href="/?show={{ show }}#reports">Any verdict ×</a>{% endif %}
+  </div>
+  <table class="table">
+    <thead><tr><th>Report</th><th class="hide-sm">Submitted</th><th>ProveIt</th><th>What actually happened</th></tr></thead>
+    <tbody>
+      {% for r in reports %}
+        <tr>
+          <td class="title"><a href="/r/{{ r.id }}">{{ r.title }}</a></td>
+          <td class="date hide-sm">{{ r.submitted }}</td>
+          <td><span class="chip {{ r.tone }}"><span class="dot"></span>{{ r.final_label }}</span></td>
+          <td>{% if r.truth_label == 'slop' %}<span class="chip outline">AI slop</span>{% else %}<span class="chip outline">{{ r.cve }}</span>{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="note">No reports match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

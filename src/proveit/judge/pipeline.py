@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import Callable
 
 from proveit import tf
 from proveit.grounding.check import ground_report
@@ -21,14 +22,22 @@ def _stage(c: tf.Completion) -> dict:
             "seconds": round(c.seconds, 1), "cost": round(c.cost, 5), "cached": c.cached, "parsed": c.data is not None}
 
 
-def triage(report: dict, repo: Repo | None = None, *, thinking: bool = True, judge_model: str | None = None) -> dict:
-    """`report` is a dataset `input` dict: title, body, submitted_at."""
+def triage(report: dict, repo: Repo | None = None, *, thinking: bool = True, judge_model: str | None = None,
+           progress: Callable[[str, dict], None] | None = None) -> dict:
+    """`report` is a dataset `input` dict: title, body, submitted_at. `progress(stage, data)` is called as each
+    stage finishes, for streaming UIs."""
     repo = repo or Repo()
+    emit = progress or (lambda stage, data: None)
     t0 = time.monotonic()
     grounding = ground_report(report, repo).to_dict()
+    emit("grounding", {"verdict": grounding["verdict"], "rev": grounding["rev"], "rev_source": grounding["rev_source"],
+                       "counts": grounding["counts"],
+                       "ungrounded": [f for f in grounding["findings"] if f["status"] == "ungrounded"][:8]})
 
     c = extract_claims(report)
     claims = c.data or {"claims": []}
+    emit("claims", {"stage": _stage(c), "claims": claims.get("claims", []), "summary": claims.get("summary", ""),
+                    "external_claims": claims.get("external_claims", [])})
     names = [m.group(0) for cl in claims.get("claims", []) for ref in cl.get("code_refs", []) for m in _NAME.finditer(ref)]
     release = None
     tag = repo.latest_release_before(report.get("submitted_at") or "2100-01-01")
@@ -43,6 +52,8 @@ def triage(report: dict, repo: Repo | None = None, *, thinking: bool = True, jud
                 external.append({**src, "for": ec["statement"][:200]})
 
     policy = repo.security_policy(grounding["rev"]) if grounding["rev"] else None
+    emit("evidence", {"snippets": [{"path": s.name, "start": s.start, "end": s.end, "reason": s.reason} for s in snippets],
+                      "external": [{"url": e["url"], "title": e["title"]} for e in external], "policy_shown": bool(policy)})
     j = judge(report, claims, grounding, snippets, external, policy=policy, thinking=thinking, model=judge_model)
     judgment = j.data or {"verdict": "needs_human", "claim_assessments": [], "confidence": 0.0,
                           "key_reasons": ["the judge returned no parsable answer"], "missing_info": [], "reply_to_reporter": ""}
@@ -68,7 +79,8 @@ def triage(report: dict, repo: Repo | None = None, *, thinking: bool = True, jud
         "confidence": judgment.get("confidence"),
         "grounding": grounding,
         "claims": claims,
-        "evidence": [{"path": s.name, "start": s.start, "end": s.end, "reason": s.reason} for s in snippets],
+        "evidence": [{"path": s.name, "start": s.start, "end": s.end, "reason": s.reason, "rev": s.rev, "lines": s.lines}
+                     for s in snippets],
         "external": [{"url": e["url"], "title": e["title"], "for": e["for"]} for e in external],
         "judgment": judgment,
         "citations": {"valid": len(citations["valid"]), "invalid": len(citations["invalid"]),

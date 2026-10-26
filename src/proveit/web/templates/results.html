@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Results and method · ProveIt{% endblock %}
+{% set test = summaries['test-v1'] %}
+{% set dev = summaries['dev-v4'] %}
+{% block content %}
+<section class="hero" style="padding-bottom:6px">
+  <div class="eyebrow">Results</div>
+  <h1 style="font-size:clamp(26px,4vw,38px)">How well does it work?</h1>
+  <p class="lead">Measured on curl's own public record: 49 reports its maintainer lists as AI slop, and 148 HackerOne
+    reports behind published curl CVEs. The pipeline only ever sees a report's title, text and submission date.</p>
+</section>
+
+<section class="section">
+  <h2>Held-out test: {{ test.overall.n_slop }} slop, {{ test.overall.n_valid }} real</h2>
+  <p>Reports were split into dev and test by a hash of their id before any work started. Everything was designed on dev;
+    this is the single run on test.</p>
+  <table class="table">
+    <thead><tr><th>ProveIt's verdict</th><th class="num">AI slop</th><th class="num">Real CVE reports</th></tr></thead>
+    <tbody>
+      {% for key, (label, tone, _) in VERDICTS.items() if key != 'error' %}
+        <tr><td><span class="chip {{ tone }}"><span class="dot"></span>{{ label }}</span></td>
+          <td class="num">{{ test.confusion.slop.get(key, 0) }}</td><td class="num">{{ test.confusion.valid.get(key, 0) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note" style="margin-top:10px">Cost of the 77 reports: {{ test.spend.split(',')[1].split('\n')[0] if ',' in test.spend else test.spend }}.
+    Deprioritized slop: {{ test.overall.slop_flagged }}/{{ test.overall.n_slop }}
+    ({{ '%.0f' % (test.overall.slop_ci[0] * 100) }}–{{ '%.0f' % (test.overall.slop_ci[1] * 100) }}% at 95%).
+    Real reports wrongly deprioritized: {{ test.overall.valid_flagged }}/{{ test.overall.n_valid }}.</p>
+</section>
+
+<section class="section">
+  <h2>What we learned building it (dev split only)</h2>
+  <table class="table">
+    <thead><tr><th>Version</th><th>Change</th><th class="num">Slop flagged</th><th class="num">Real flagged</th><th class="num">Slop called valid</th></tr></thead>
+    <tbody>
+      <tr><td>grounding only</td><td>Existence checks, no model</td><td class="num">2/31</td><td class="num">0/89</td><td class="num">–</td></tr>
+      <tr><td>v1</td><td>Nano claims + Ultra judgment over real code</td><td class="num">16/31</td><td class="num">5/89</td><td class="num">0</td></tr>
+      <tr><td>v2</td><td>Receipts must back a central claim; show the release version next to master</td><td class="num">12/31</td><td class="num">0/89</td><td class="num">3</td></tr>
+      <tr><td>v3</td><td>Apply curl's own "not security issues" policy, as of the report's revision</td><td class="num">18/31</td><td class="num">2/89</td><td class="num">0</td></tr>
+      <tr><td>v4</td><td>A policy-only rejection of a confirmed flaw becomes a policy question</td><td class="num">{{ dev.overall.slop_flagged }}/31</td><td class="num">{{ dev.overall.valid_flagged }}/89</td><td class="num">0</td></tr>
+    </tbody>
+  </table>
+  <div class="panel stack" style="margin-top:14px">
+    <p><b>Most slop does not invent code.</b> Existence checks alone caught 2 of 31 dev slop reports. The rest cite real
+      functions and make false claims about them, which is why the judgment stage reads the real code.</p>
+    <p><b>Reporters read releases, not master.</b> All five v1 false alarms were real 2026 reports about code that master
+      had already changed by the time they were filed. Showing the release version of each changed function, with the
+      commits in between, removed them.</p>
+    <p><b>The judge can be fooled; receipts catch it.</b> On one slop report, Ultra "confirmed" a quote of nghttp2's
+      documentation that the report invented. The quote was not in the fetched page, so the verdict was withdrawn.</p>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Limitations</h2>
+  <div class="panel stack">
+    <p>Two real CVE reports in the test split were wrongly deprioritized: CVE-2023-38546 (the judge read cookie loading
+      from a file named "none" as intended behavior) and CVE-2022-27776 (it misread a redirect condition).</p>
+    <p>The evaluation uses one project. curl is a demanding case (C, 40,000 commits, a strict security policy), but other
+      projects will need their own source paths and policy file.</p>
+    <p>Most real reports end at "needs a human": ProveIt is built to be safe, not decisive, when the evidence is mixed.</p>
+    <p>Reproduction of proof-of-concept code in a sandbox is not implemented yet; verdicts come from reading code.</p>
+  </div>
+</section>
+{% endblock %}

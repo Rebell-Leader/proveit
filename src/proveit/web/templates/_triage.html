@@ -1,0 +1,157 @@
+{%- macro slug(s) -%}{{ s | replace('/', '-') | replace('.', '-') | replace('@', '-') }}{%- endmacro -%}
+
+<div class="verdict">
+  <div class="panel verdict-main {{ v.tone }}">
+    <h3>ProveIt's verdict</h3>
+    <div class="big">{{ v.final_label }}</div>
+    <p>{{ v.explain }}</p>
+    {% if v.confidence is not none %}<span class="chip outline">judge confidence {{ '%.0f' % (v.confidence * 100) }}%</span>{% endif %}
+    {% if v.policy_section %}<span class="chip warn">curl policy: {{ v.policy_section }}</span>{% endif %}
+    {% if v.receipts_override %}
+      <div class="override"><b>Receipts check:</b> {{ v.receipts_override }}{% if v.judge_verdict %} (the judge itself said <code>{{ v.judge_verdict }}</code>){% endif %}.</div>
+    {% endif %}
+    {% if v.key_reasons %}
+      {% if v.receipts_override %}<p class="note" style="margin:12px 0 0">The judge's reasoning, withdrawn by the receipts check:</p>{% endif %}
+      <ul class="reasons" {% if v.receipts_override %}style="opacity:.7"{% endif %}>{% for r in v.key_reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  <div class="panel">
+    {% if v.truth %}
+      <h3>What actually happened</h3>
+      <div class="truth"><span class="chip {{ v.truth.tone }}"><span class="dot"></span>{{ 'AI slop' if v.truth_label == 'slop' else 'Real vulnerability' }}</span></div>
+      <p>{{ v.truth.text }}</p>
+      <p class="note">This label comes from curl's public records. ProveIt never saw it.</p>
+    {% else %}
+      <h3>Report</h3>
+      <p>{{ v.summary }}</p>
+    {% endif %}
+    {% if v.missing_info %}
+      <h3 style="margin-top:14px">What's missing</h3>
+      <ul class="reasons">{% for m in v.missing_info %}<li>{{ m }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</div>
+
+<div class="timeline" aria-label="Which model did what">
+  <div class="tl done">
+    <div class="k">1 · Grounding</div>
+    <div class="v">{{ v.grounding.verdict | replace('_', ' ') }}</div>
+    <div class="d">no model · {{ v.grounding.counts.grounded or 0 }} references checked out, {{ (v.grounding.counts.ungrounded_strong or 0) + (v.grounding.counts.ungrounded_medium or 0) }} did not</div>
+  </div>
+  <div class="tl done">
+    <div class="k">2 · Claims</div>
+    <div class="v">{{ v.stages.claims.model if v.stages.claims else 'Nemotron Nano' }}</div>
+    <div class="d">{{ v.claims | length }} claims{% if v.stages.claims %} · {{ v.stages.claims.prompt_tokens + v.stages.claims.completion_tokens }} tokens · ${{ '%.4f' % v.stages.claims.cost }}{% endif %}</div>
+  </div>
+  <div class="tl done">
+    <div class="k">3 · Evidence</div>
+    <div class="v">{{ v.code | length }} code snippets</div>
+    <div class="d">real curl source at {{ v.grounding.rev }}{% if v.external_sources %} · {{ v.external_sources | length }} docs via Tavily{% endif %}</div>
+  </div>
+  <div class="tl done">
+    <div class="k">4 · Judgment</div>
+    <div class="v">{{ v.stages.judge.model if v.stages.judge else 'Nemotron Ultra' }}</div>
+    <div class="d">{% if v.stages.judge %}{{ v.stages.judge.prompt_tokens + v.stages.judge.completion_tokens }} tokens · {{ v.stages.judge.seconds }}s · ${{ '%.4f' % v.stages.judge.cost }}{% endif %}</div>
+  </div>
+  <div class="tl done">
+    <div class="k">5 · Receipts</div>
+    <div class="v">{{ v.citations.valid or 0 }} of {{ (v.citations.valid or 0) + (v.citations.invalid or 0) }} citations verified</div>
+    <div class="d">every citation must point at code the judge was shown</div>
+  </div>
+</div>
+
+<div class="cols">
+  <div class="stack">
+    <div class="claims">
+      {% for c in v.claims %}
+        <div class="claim">
+          <div class="claim-head">
+            <span class="claim-id">{{ c.id }}</span><span class="kind">{{ c.kind }}</span>
+            <span class="chip {{ c.tone }}" style="margin-left:auto">{{ c.status }}</span>
+          </div>
+          <p class="text">{{ c.text }}</p>
+          {% if c.reasoning %}<p class="why">{{ c.reasoning }}</p>{% endif %}
+          {% if c.citations %}
+            <div class="cites">
+              {% for x in c.citations %}
+                {% if x.check %}
+                  <span class="cite" title="{{ x.note }}">deterministic check</span>
+                {% elif x.file.startswith('https://') or x.file.startswith('http://') %}
+                  <a class="cite" href="{{ x.file }}" rel="noopener nofollow" target="_blank" title="{{ x.note }}">source</a>
+                {% elif x.valid %}
+                  <a class="cite" href="#L-{{ slug(x.file) }}-{{ x.line }}" title="{{ x.note }}">{{ x.file }}:{{ x.line }}</a>
+                {% else %}
+                  <span class="cite invalid" title="Not shown to the judge, so this citation was discarded">{{ x.file }}:{{ x.line }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="panel"><p class="note">No checkable claims were extracted from this report.</p></div>
+      {% endfor %}
+    </div>
+
+    {% if v.grounding.problems %}
+      <div class="panel">
+        <h3>Deterministic checks that failed</h3>
+        <ul class="problems">
+          {% for f in v.grounding.problems %}
+            <li><span class="chip {{ 'bad' if f.severity == 'strong' else 'muted' }}">{{ f.check }}</span> {{ f.evidence }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if v.external_checks %}
+      <div class="panel">
+        <h3>What the report says about other projects</h3>
+        {% for x in v.external_checks %}
+          <p><span class="chip {{ 'good' if x.status == 'confirmed' else ('bad' if x.status == 'contradicted' else 'muted') }}">{{ x.status | replace('_', ' ') }}</span> {{ x.statement }}</p>
+          {% if x.quote %}<p class="quote">“{{ x.quote }}”{% if x.url.startswith('https://') or x.url.startswith('http://') %} <a href="{{ x.url }}" rel="noopener nofollow" target="_blank">source</a>{% endif %}</p>{% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if v.reply %}
+      <div class="panel">
+        <h3>Draft reply to the reporter</h3>
+        <p class="reply" id="reply-{{ v.id or 'live' }}">{{ v.reply }}</p>
+        <button class="btn" data-copy="#reply-{{ v.id or 'live' }}">Copy reply</button>
+      </div>
+    {% endif %}
+
+    <div class="panel">
+      <h3>The report{% if v.source_url %} · <a href="{{ v.source_url }}" rel="noopener" target="_blank">full text on HackerOne</a>{% endif %}</h3>
+      <div class="excerpt">{{ v.excerpt }}{% if v.excerpt_truncated %}
+…{% endif %}</div>
+    </div>
+  </div>
+
+  <div>
+    {% for s in v.code %}
+      <div class="code">
+        <div class="code-head"><b>{{ s.name }}</b><span>lines {{ s.start }}–{{ s.end }} · {{ s.reason }}</span></div>
+        {% if s.cited or loop.index <= 2 %}
+          <div class="code-body">
+            <table>
+              {% for r in s.rows %}
+                <tr id="L-{{ slug(s.name) }}-{{ r.n }}" class="{{ 'hit' if r.notes }}"><td class="ln">{{ r.n }}</td><td class="src">{{ r.text }}</td></tr>
+                {% for n in r.notes %}<tr class="note"><td class="ln"></td><td class="src">{{ n }}</td></tr>{% endfor %}
+              {% endfor %}
+            </table>
+          </div>
+        {% else %}
+          <details>
+            <summary>Show {{ s.rows | length }} lines (not cited by the judge)</summary>
+            <div class="code-body"><table>
+              {% for r in s.rows %}<tr><td class="ln">{{ r.n }}</td><td class="src">{{ r.text }}</td></tr>{% endfor %}
+            </table></div>
+          </details>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="panel"><p class="note">No curl code could be retrieved for this report: it names no curl function, file or line that exists.</p></div>
+    {% endfor %}
+  </div>
+</div>

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ v.title }} · ProveIt{% endblock %}
+{% block content %}
+  <div class="crumbs"><a href="/">Reports</a> / HackerOne #{{ v.id }}</div>
+  <h1 class="report-title">{{ v.title }}</h1>
+  <div class="meta">
+    <span>Submitted {{ v.submitted }}</span>
+    <span>Checked against curl {{ v.grounding.rev_source }} (<code>{{ v.grounding.rev }}</code>)</span>
+    <span>{{ v.split }} split</span>
+    <span>${{ '%.3f' % v.cost }} · {{ v.seconds }}s</span>
+  </div>
+  {% include "_triage.html" %}
+{% endblock %}

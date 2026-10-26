@@ -1,0 +1,10 @@
+.env
+.venv
+.git
+vendor
+runs
+data/cache
+reviews
+tasks
+tests
+**/__pycache__

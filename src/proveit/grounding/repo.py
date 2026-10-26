@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
 
-from proveit import CACHE_DIR, VENDOR_DIR
+from proveit import CACHE_DIR, DATA_DIR, VENDOR_DIR
 
 CURL_URL = "https://github.com/curl/curl.git"
 CURL_DIR = VENDOR_DIR / "curl"
@@ -73,11 +73,11 @@ class Repo:
         prior = [t for t, d in self.release_tags() if d <= iso_date]
         return prior[-1] if prior else None
 
-    @lru_cache(maxsize=256)
+    @lru_cache(maxsize=64)
     def files(self, rev: str) -> frozenset[str]:
         return frozenset(self._git("ls-tree", "-r", "--name-only", rev).splitlines())
 
-    @lru_cache(maxsize=2048)
+    @lru_cache(maxsize=512)
     def read(self, rev: str, path: str) -> str | None:
         res = subprocess.run(
             ["git", "-C", str(self.path), "show", f"{rev}:{path}"], capture_output=True, text=True, errors="replace"
@@ -92,7 +92,7 @@ class Repo:
     def path_ever_existed(self, path: str) -> bool:
         return bool(self._git("log", "--all", "-1", "--format=%H", "--", path, check=False).strip())
 
-    @lru_cache(maxsize=256)
+    @lru_cache(maxsize=24)  # each holds ~30k names; kept small for 512 MB hosts
     def identifiers(self, rev: str) -> frozenset[str]:
         """Every identifier-looking token in curl's source dirs at a revision (cached on disk)."""
         cache = CACHE_DIR / "idents" / f"{rev}.txt"
@@ -106,7 +106,14 @@ class Repo:
 
     @lru_cache(maxsize=1)
     def identifier_history(self) -> frozenset[str]:
-        """Union of identifiers across all release tags since 7.50: has this name ever existed in curl?"""
+        """Union of identifiers across all release tags since 7.50: has this name ever existed in curl?
+
+        Deployments ship it as data/curl_identifier_history.txt (`proveit export-history`) so a cold start does not
+        grep 150 release tags.
+        """
+        shipped = DATA_DIR / "curl_identifier_history.txt"
+        if shipped.exists():
+            return frozenset(shipped.read_text().split())
         tags = [t for t, _ in self.release_tags() if _version_tuple(t) >= (7, 50, 0)]
         with ThreadPoolExecutor(max_workers=8) as pool:
             sets = list(pool.map(lambda t: self.identifiers(self.resolve(t)), tags))

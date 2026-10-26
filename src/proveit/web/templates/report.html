@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ v.title }} · ProveIt{% endblock %}
 {% block content %}
-  <div class="crumbs"><a href="/">Reports</a> / HackerOne #{{ v.id }}</div>
+  <div class="crumbs"><a href="{{ u('/') }}">Reports</a> / HackerOne #{{ v.id }}</div>
   <h1 class="report-title">{{ v.title }}</h1>
   <div class="meta">
     <span>Submitted {{ v.submitted }}</span>

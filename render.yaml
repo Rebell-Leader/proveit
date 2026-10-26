@@ -1,0 +1,20 @@
+# Render blueprint for ProveIt's live mode on the free plan.
+# In Render: New > Blueprint > select this repository, then paste NEBIUS_API_KEY and TAVILY_API_KEY when asked.
+# Free instances sleep after 15 minutes without traffic; the first request after that takes about a minute.
+services:
+  - type: web
+    name: proveit-live
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NEBIUS_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: PROVEIT_DAILY_BUDGET
+        value: "1.00"
+      - key: PROVEIT_RUNS_PER_IP
+        value: "5"

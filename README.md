@@ -7,6 +7,9 @@ maintainers. ProveIt reads a report, pins every file, line, function, commit, ve
 repository at the revision the report targets, and tells the maintainer what checks out and what does not.
 It is built on NVIDIA Nemotron models served by Nebius Token Factory.
 
+**Demo:** [judge mode](https://avaliev-proveit.static.hf.space) (197 curl reports, always on) ·
+[live mode](https://avaliev-proveit-live.hf.space/live) (check a report now; the server may take a minute to wake)
+
 > Status: day 3 of 5 (Nebius x NVIDIA Global AI Hackathon). The pipeline, held-out evaluation and web app work.
 > Deployment and the demo video come next.
 
@@ -85,7 +88,11 @@ by showing the release version of each changed function with the commits in betw
 ```bash
 uv run uvicorn proveit.web.app:app --port 8000      # http://localhost:8000
 docker build -t proveit . && docker run -p 7860:7860 -e NEBIUS_API_KEY=... -e TAVILY_API_KEY=... proveit
+scripts/deploy_spaces.sh                            # both Hugging Face Spaces (see deploy/)
 ```
+
+Hosting: the static judge mode is a free static Hugging Face Space; live mode is a Gradio-SDK Space on ZeroGPU
+hardware running the same FastAPI app (`deploy/hf-live/app.py`). The models run on Token Factory, not on that GPU.
 
 ## Setup
 

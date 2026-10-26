@@ -9,9 +9,9 @@
     claim with line-by-line receipts. It never closes a report; it tells you where to look and drafts the reply.
   </p>
   <div class="cta">
-    <a class="btn primary" href="/r/2887487">See it on an AI-slop report</a>
-    <a class="btn" href="/r/4099618">See it on a real CVE</a>
-    <a class="btn" href="/live">Try a report live</a>
+    <a class="btn primary" href="{{ u('/r/2887487') }}">See it on an AI-slop report</a>
+    <a class="btn" href="{{ u('/r/4099618') }}">See it on a real CVE</a>
+    <a class="btn" href="{{ u('/live') }}">Try a report live</a>
   </div>
 
   <div class="stats" aria-label="Results on held-out reports">
@@ -20,7 +20,7 @@
     <div class="stat"><b>{{ test.valid_confirmed }} / {{ test.n_valid }}</b><span>real CVE reports confirmed with cited code</span></div>
     <div class="stat"><b>{{ test.valid_flagged }} / {{ test.n_valid }}</b><span>real CVE reports wrongly deprioritized</span></div>
   </div>
-  <p class="note">Held-out test split of curl's own HackerOne reports, run once after development. About $0.017 per report. <a href="/results">Method and all numbers</a>.</p>
+  <p class="note">Held-out test split of curl's own HackerOne reports, run once after development. About $0.017 per report. <a href="{{ u('/results') }}">Method and all numbers</a>.</p>
 </section>
 
 <section class="section">
@@ -43,7 +43,7 @@
       {% for f in featured %}
         <tr>
           <td style="width:34%"><b>{{ f.headline }}</b><div class="note">{{ f.text }}</div></td>
-          <td class="title"><a href="/r/{{ f.id }}">{{ f.title }}</a></td>
+          <td class="title"><a href="{{ u('/r/' ~ f.id) }}">{{ f.title }}</a></td>
           <td><span class="chip {{ f.tone }}"><span class="dot"></span>{{ f.final_label }}</span></td>
         </tr>
       {% endfor %}
@@ -54,30 +54,31 @@
 <section class="section" id="reports">
   <h2>All {{ total }} curl reports</h2>
   <p>Every report curl's maintainer listed as AI slop, and every HackerOne report behind a published curl CVE. Each was triaged without seeing its outcome.</p>
-  <div class="filters">
-    <a href="/?show=all#reports" class="{{ 'on' if show == 'all' }}">All</a>
-    <a href="/?show=slop#reports" class="{{ 'on' if show == 'slop' }}">AI slop</a>
-    <a href="/?show=valid#reports" class="{{ 'on' if show == 'valid' }}">Real CVEs</a>
-    <span style="width:12px"></span>
-    {% for key, (label, tone, _) in VERDICTS.items() if key != 'error' %}
-      <a href="/?show={{ show }}&verdict={{ key }}#reports" class="{{ 'on' if verdict == key }}">{{ label }}</a>
-    {% endfor %}
-    {% if verdict != 'all' %}<a href="/?show={{ show }}#reports">Any verdict ×</a>{% endif %}
+  <div class="filters" data-group="show">
+    <a href="?show=all#reports" data-show="all" class="on">All</a>
+    <a href="?show=slop#reports" data-show="slop">AI slop</a>
+    <a href="?show=valid#reports" data-show="valid">Real CVEs</a>
   </div>
-  <table class="table">
+  <div class="filters" data-group="verdict">
+    <a href="?verdict=all#reports" data-verdict="all" class="on">Any verdict</a>
+    {% for key, (label, tone, _) in VERDICTS.items() if key != 'error' %}
+      <a href="?verdict={{ key }}#reports" data-verdict="{{ key }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  <table class="table" id="gallery">
     <thead><tr><th>Report</th><th class="hide-sm">Submitted</th><th>ProveIt</th><th>What actually happened</th></tr></thead>
     <tbody>
       {% for r in reports %}
-        <tr>
-          <td class="title"><a href="/r/{{ r.id }}">{{ r.title }}</a></td>
+        <tr data-truth="{{ r.truth_label }}" data-final="{{ r.final }}">
+          <td class="title"><a href="{{ u('/r/' ~ r.id) }}">{{ r.title }}</a></td>
           <td class="date hide-sm">{{ r.submitted }}</td>
           <td><span class="chip {{ r.tone }}"><span class="dot"></span>{{ r.final_label }}</span></td>
           <td>{% if r.truth_label == 'slop' %}<span class="chip outline">AI slop</span>{% else %}<span class="chip outline">{{ r.cve }}</span>{% endif %}</td>
         </tr>
-      {% else %}
-        <tr><td colspan="4" class="note">No reports match these filters.</td></tr>
       {% endfor %}
+      <tr id="no-match" class="hidden"><td colspan="4" class="note">No reports match these filters.</td></tr>
     </tbody>
   </table>
 </section>
 {% endblock %}
+{% block scripts %}<script src="/static/gallery.js" defer></script>{% endblock %}

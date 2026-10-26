@@ -48,6 +48,7 @@ app = FastAPI(title="ProveIt", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 templates.env.globals["VERDICTS"] = VERDICTS
+templates.env.globals["u"] = lambda path: path  # the static build maps these to .html files
 budget = Budget()
 repo = Repo()
 
@@ -81,21 +82,19 @@ def healthz() -> dict:
     return {"ok": True}
 
 
-@app.get("/", response_class=HTMLResponse)
-def home(request: Request, show: str = "all", verdict: str = "all"):
+def home_context() -> dict:
+    """Everything the home page shows. Filtering happens in the browser (static/gallery.js)."""
     idx = _index()
-    reports = idx["reports"]
-    if show in ("slop", "valid"):
-        reports = [r for r in reports if r["truth_label"] == show]
-    if verdict in VERDICTS:
-        reports = [r for r in reports if r["final"] == verdict]
     test = idx["summaries"].get("test-v1", {})
     by_id = {r["id"]: r for r in idx["reports"]}
     featured = [{"id": i, "headline": h, "text": t, **by_id[i]} for i, h, t in FEATURED if i in by_id]
-    return templates.TemplateResponse(request, "home.html", {
-        "reports": reports, "show": show, "verdict": verdict, "total": len(idx["reports"]), "featured": featured,
-        "test": test.get("overall", {}), "test_confusion": test.get("confusion", {}), "test_spend": test.get("spend", ""),
-    })
+    return {"reports": idx["reports"], "total": len(idx["reports"]), "featured": featured,
+            "test": test.get("overall", {}), "test_confusion": test.get("confusion", {}), "test_spend": test.get("spend", "")}
+
+
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse(request, "home.html", home_context())
 
 
 @app.get("/r/{h1_id}", response_class=HTMLResponse)
@@ -108,7 +107,7 @@ def report_page(request: Request, h1_id: int):
 
 @app.get("/live", response_class=HTMLResponse)
 def live_page(request: Request):
-    return templates.TemplateResponse(request, "live.html", {"budget": budget.status()})
+    return templates.TemplateResponse(request, "live.html", {"budget": budget.status(), "live_url": None})
 
 
 @app.get("/results", response_class=HTMLResponse)
@@ -185,8 +184,11 @@ async def live_run(request: Request):
                 if _report(h1_id):
                     yield _sse("cached", {"href": f"/r/{h1_id}"})
                     return
-            elif not (payload.get("body") or "").strip():
+            if not url and not (payload.get("body") or "").strip():
                 yield _sse("failed", {"message": "Paste the report text, or give a HackerOne URL."})
+                return
+            if not (CURL_DIR / ".git").exists():
+                yield _sse("failed", {"message": "Live mode is still warming up (fetching curl's source). Try again in a minute; judge mode works now."})
                 return
             # Admission (concurrency, daily dollars, per-visitor runs) before any outbound request or model call.
             refusal = budget.admit(ip)

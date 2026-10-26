@@ -14,11 +14,11 @@
 <body>
   <header class="top">
     <div class="wrap">
-      <a class="brand" href="/"><span class="brand-mark">✓</span>ProveIt</a>
+      <a class="brand" href="{{ u('/') }}"><span class="brand-mark">✓</span>ProveIt</a>
       <nav class="nav">
-        <a href="/" class="{{ 'active' if request.url.path == '/' }}">Reports</a>
-        <a href="/live" class="{{ 'active' if request.url.path == '/live' }}">Try it live</a>
-        <a href="/results" class="{{ 'active' if request.url.path == '/results' }}">Results</a>
+        <a href="{{ u('/') }}" class="{{ 'active' if request.url.path == '/' }}">Reports</a>
+        <a href="{{ u('/live') }}" class="{{ 'active' if request.url.path == '/live' }}">Try it live</a>
+        <a href="{{ u('/results') }}" class="{{ 'active' if request.url.path == '/results' }}">Results</a>
         <a class="gh" href="https://github.com/Rebell-Leader/proveit">GitHub</a>
       </nav>
     </div>

@@ -15,11 +15,10 @@ RUN uv sync --frozen --no-dev
 
 # Live mode reads curl's history at any revision, so it needs a full clone (about 140 MB).
 RUN git clone -q https://github.com/curl/curl.git vendor/curl
-# Pre-build the cross-release symbol index so the first live run does not pay for it.
-RUN uv run --no-dev python -c "from proveit.grounding.repo import Repo; print(len(Repo().identifier_history()), 'identifiers')"
 
 COPY --chown=user data/demo ./data/demo
-COPY --chown=user data/curl_reports.jsonl ./data/
+# The cross-release symbol index ships prebuilt, so neither the build nor the first live run greps 150 release tags.
+COPY --chown=user data/curl_reports.jsonl data/curl_identifier_history.txt ./data/
 
 ENV PROVEIT_FETCH=1 PROVEIT_DAILY_BUDGET=1.00 PROVEIT_RUNS_PER_IP=5 PORT=7860
 EXPOSE 7860

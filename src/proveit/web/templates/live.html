@@ -8,6 +8,14 @@
     streams each stage as it runs. A run takes 15 to 60 seconds and calls NVIDIA Nemotron on Nebius Token Factory.</p>
 </section>
 
+{% if live_url %}
+<div class="panel stack">
+  <p><b>Live mode runs on a separate server</b>, because this page is a static site that stays fast and free.
+    The server sleeps when nobody has used it for a while, so the first visit can take up to a minute to wake it.</p>
+  <p><a class="btn primary" href="{{ live_url }}/live">Open live mode</a></p>
+  <p class="note">Each run calls NVIDIA Nemotron on Nebius Token Factory. Runs are capped per visitor and per day.</p>
+</div>
+{% else %}
 <div class="panel live-form">
   <div class="tabs" role="tablist">
     <button type="button" class="on" data-tab="url">HackerOne URL</button>
@@ -41,5 +49,6 @@
   </div>
 </div>
 <div id="result"></div>
+{% endif %}
 {% endblock %}
-{% block scripts %}<script src="/static/live.js" defer></script>{% endblock %}
+{% block scripts %}{% if not live_url %}<script src="/static/live.js" defer></script>{% endif %}{% endblock %}

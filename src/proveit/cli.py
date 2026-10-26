@@ -116,6 +116,26 @@ def cmd_export_demo(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_site(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from proveit.web.static_site import build
+
+    print(json.dumps(build(Path(args.out), args.live_url), indent=2))
+    return 0
+
+
+def cmd_export_history(_: argparse.Namespace) -> int:
+    from proveit import DATA_DIR
+    from proveit.grounding.repo import Repo
+
+    path = DATA_DIR / "curl_identifier_history.txt"
+    names = sorted(Repo().identifier_history())
+    path.write_text("\n".join(names) + "\n")
+    print(f"{len(names)} identifiers -> {path}")
+    return 0
+
+
 def cmd_eval(args: argparse.Namespace) -> int:
     from proveit.grounding import evaluate
 
@@ -148,6 +168,11 @@ def main() -> None:
     te.add_argument("--workers", type=int, default=6)
     te.set_defaults(fn=cmd_triage_eval)
     sub.add_parser("export-demo", help="write judge-mode data for the web app to data/demo/").set_defaults(fn=cmd_export_demo)
+    bs = sub.add_parser("build-site", help="pre-render judge mode to static HTML")
+    bs.add_argument("--out", default="site")
+    bs.add_argument("--live-url", default=None, help="base URL of the live server, e.g. https://proveit.onrender.com")
+    bs.set_defaults(fn=cmd_build_site)
+    sub.add_parser("export-history", help="write curl's cross-release identifier index for deployments").set_defaults(fn=cmd_export_history)
     e = sub.add_parser("eval", help="run the grounding checker over the dataset")
     e.add_argument("--out", default="runs/grounding")
     e.set_defaults(fn=cmd_eval)

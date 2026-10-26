@@ -4,8 +4,26 @@
     {
       "name": "proveit-web",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "uvicorn", "proveit.web.app:app", "--port", "8000"],
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "proveit.web.app:app",
+        "--port",
+        "8000"
+      ],
       "port": 8000
+    },
+    {
+      "name": "proveit-static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8100",
+        "--directory",
+        "site"
+      ],
+      "port": 8100
     }
   ]
 }

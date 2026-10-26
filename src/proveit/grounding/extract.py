@@ -36,7 +36,9 @@ _ATTRIB = re.compile(
 # A sentence about another project: a missing path there is that project's file (libssh's src/knownhosts.c).
 _DEP_HINT = re.compile(r"\b(libssh2?|openssl|boringssl|libressl|wolfssl|gnutls|mbedtls|nghttp2|nghttp3|ngtcp2|quiche|"
                        r"zlib|brotli|zstd|c-ares|libidn2|libpsl|rustls|krb5|openldap|nginx|apache|node|python)\b", re.I)
-_TESTED_CTX = re.compile(r"\b(tested|testing|checkout|checked out|built|build|reproduced|HEAD|at commit|on commit)\b", re.I)
+_TESTED_CTX = re.compile(r"\b(tested|testing|checkout|checked out|reproduced|HEAD|at commit|on commit)\b", re.I)
+# "repeat on a build containing commit X (the fix)" names a fix, not the revision the report describes.
+_FIX_CTX = re.compile(r"\b(fix|fixed|fixes|patch|patched|later release|regression)\b", re.I)
 _MEMBER = re.compile(r"[A-Za-z_]\w*(?:(?:->|\.)[A-Za-z_]\w*)+")
 _COMMIT_CTX = re.compile(r"\b(commit|checkout|sha|revision|rev|git|HEAD|tree|tag|fixed in|introduced in)\b", re.I)
 _C_LINE = re.compile(r"(;\s*$|\{\s*$|^\s*\}|->|\bif\s*\(|\breturn\b|\bwhile\s*\(|\bfor\s*\(|\bstruct\s+\w+|==|!=|\bNULL\b)")
@@ -83,6 +85,7 @@ class Extracted:
     commits: list[str] = field(default_factory=list)
     tested_commits: list[str] = field(default_factory=list)  # "Tested at commit X": the revision the report describes
     members: set[str] = field(default_factory=set)  # names from data->set.httpauth style expressions
+    line_mentions: list[tuple[int, list[str]]] = field(default_factory=list)  # ("line 4798", names in that sentence)
     versions: list[str] = field(default_factory=list)
     cves: list[str] = field(default_factory=list)
     blocks: list[CodeBlock] = field(default_factory=list)
@@ -198,6 +201,12 @@ def extract(title: str, body: str) -> Extracted:
                 add_file(FileRef(path, reporter=reporter, external=external))
 
         proposal = bool(_PROPOSAL_HINT.search(line))
+        # "`Curl_ossl_check_peer_cert()` (line 4795)", "Guard at line 4798: `!(conn_config->verifypeer ...)`"
+        if not proposal:
+            mentioned = [n for n in re.findall(r"[A-Za-z_]\w{3,}", " ".join(_INLINE.findall(line)))]
+            for lm in re.finditer(r"\blines?\s+(\d{2,6})", line, re.I):
+                if mentioned:
+                    out.line_mentions.append((int(lm.group(1)), mentioned))
         names: list[tuple[str, str, bool]] = []  # (name, where, written as a call)
         for m in _INLINE.finditer(line):
             span = m.group(1).strip()
@@ -230,7 +239,7 @@ def extract(title: str, body: str) -> Extracted:
         for h in _HEX.findall(line):
             if _is_commitish(h) and (len(h) >= 12 or _COMMIT_CTX.search(line)):
                 out.commits.append(h)
-                if _TESTED_CTX.search(line):
+                if _TESTED_CTX.search(line) and not _FIX_CTX.search(line):
                     out.tested_commits.append(h)
     out.proposed -= described
 

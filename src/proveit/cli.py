@@ -28,6 +28,7 @@ def cmd_smoke(_: argparse.Namespace) -> int:
                 schema,
                 model=model,
                 max_tokens=512,
+                use_cache=False,
             )
             print(f"{model}: {c.data} ({c.prompt_tokens}+{c.completion_tokens} tokens, {c.seconds:.1f}s)")
         except Exception as e:  # report every model, keep going
@@ -69,6 +70,45 @@ def cmd_ground(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_triage(args: argparse.Namespace) -> int:
+    from proveit import dataset, tf
+    from proveit.judge.pipeline import describe, triage
+
+    rows = {r["h1_id"]: r for r in dataset.load()}
+    row = rows.get(args.h1_id)
+    if not row:
+        print(f"report {args.h1_id} is not in the dataset (or not public)", file=sys.stderr)
+        return 1
+    result = triage(row["input"], thinking=not args.no_thinking)
+    print(json.dumps(result, indent=2) if args.json else describe(result))
+    print(f"\n[label, never shown to the models: {row['label']}]\nSpend this run: {tf.SPEND}", file=sys.stderr)
+    return 0
+
+
+def cmd_adversarial(args: argparse.Namespace) -> int:
+    from proveit import ROOT, tf
+    from proveit.judge.pipeline import triage
+
+    cases = json.loads((ROOT / "tests" / "fixtures" / "adversarial.json").read_text())["cases"]
+    passed = 0
+    for case in cases:
+        res = triage({k: case[k] for k in ("title", "body", "submitted_at")})
+        ok = res["final"] in case["expect"]
+        passed += ok
+        why = res["receipts_override"] or "; ".join(res["judgment"].get("key_reasons", [])[:1])
+        print(f"{'PASS' if ok else 'FAIL'} {case['name']:26} final={res['final']:17} expected {'/'.join(case['expect'])}")
+        print(f"     {why[:200]}")
+    print(f"\n{passed}/{len(cases)} adversarial cases handled as expected. Spend: {tf.SPEND}")
+    return 0 if passed == len(cases) else 1
+
+
+def cmd_triage_eval(args: argparse.Namespace) -> int:
+    from proveit.judge import evaluate
+
+    evaluate.run(split=args.split, per_label=args.per_label, thinking=not args.no_thinking, name=args.name, workers=args.workers)
+    return 0
+
+
 def cmd_eval(args: argparse.Namespace) -> int:
     from proveit.grounding import evaluate
 
@@ -87,6 +127,19 @@ def main() -> None:
     g = sub.add_parser("ground", help="grounding report for one HackerOne report")
     g.add_argument("h1_id", type=int)
     g.set_defaults(fn=cmd_ground)
+    t = sub.add_parser("triage", help="full triage of one report: grounding, Nano claims, evidence, Ultra judgment")
+    t.add_argument("h1_id", type=int)
+    t.add_argument("--json", action="store_true")
+    t.add_argument("--no-thinking", action="store_true", help="run the judge with reasoning off")
+    t.set_defaults(fn=cmd_triage)
+    sub.add_parser("adversarial", help="run the adversarial fixture reports through the full pipeline").set_defaults(fn=cmd_adversarial)
+    te = sub.add_parser("triage-eval", help="run the full triage over a split and score it")
+    te.add_argument("--split", choices=["dev", "test", "all"], default="dev")
+    te.add_argument("--per-label", type=int, default=None, help="at most N slop and N valid reports (deterministic sample)")
+    te.add_argument("--no-thinking", action="store_true")
+    te.add_argument("--name", default=None, help="run name under runs/triage/")
+    te.add_argument("--workers", type=int, default=6)
+    te.set_defaults(fn=cmd_triage_eval)
     e = sub.add_parser("eval", help="run the grounding checker over the dataset")
     e.add_argument("--out", default="runs/grounding")
     e.set_defaults(fn=cmd_eval)

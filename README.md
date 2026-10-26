@@ -7,19 +7,29 @@ maintainers. ProveIt reads a report, pins every file, line, function, commit, ve
 repository at the revision the report targets, and tells the maintainer what checks out and what does not.
 It is built on NVIDIA Nemotron models served by Nebius Token Factory.
 
-> Status: day 1 of 5 (Nebius x NVIDIA Global AI Hackathon). The deterministic grounding layer and the labeled
-> evaluation set work. The Nemotron judgment stage, the sandbox reproduction and the web app come next.
+> Status: day 2 of 5 (Nebius x NVIDIA Global AI Hackathon). Grounding, the Nemotron judgment stage and the
+> evaluation work end to end from the command line, with held-out results below. The web app and sandbox
+> reproduction come next.
 
 ## How it works
 
-1. **Grounding (deterministic, no model):** extract everything the report cites, then check it against curl at the
-   commit that was on master the day the report was submitted (or the commit in its GitHub permalink).
-   Examples of what it catches: functions that never existed in any curl release, quoted code that appears nowhere in
-   curl, `strcpy()` claimed in a file at a revision where curl's own source checker bans `strcpy`, versions that did
-   not exist yet.
-2. **Judgment (Nemotron on Token Factory, in progress):** Nemotron 3 Nano extracts claims; Nemotron 3 Ultra reads the
-   real code the grounding step retrieved and judges whether each claimed flaw is real.
-3. **Reproduction (in progress):** builds the target revision and runs the report's PoC in a sandbox with no network.
+| Stage | What runs | Why |
+|---|---|---|
+| 1. Grounding | deterministic code, no model | Pins every cited file, line, symbol, commit, quote and version to curl at the revision the report targets. Catches outright fabrication. |
+| 2. Claims | **Nemotron 3 Nano** (30B-A3B), reasoning off, ~$0.0003 | Turns the report into checkable claims (flaw, trigger, impact...) and lists what it asserts about other projects' docs. |
+| 3. Evidence | deterministic code + **Tavily** | Fetches the real curl functions and cited lines, line-numbered; Tavily fetches the dependencies' own documentation when the report quotes it. |
+| 4. Judgment | **Nemotron 3 Ultra** (550B), reasoning on, ~$0.015 | Rules on each claim against the code it was shown: supported, contradicted or not verifiable, with line citations, a verdict and a draft reply. |
+| 5. Receipts | deterministic code | Every citation must point at code or a source the judge was shown, on a central claim; external quotes must appear verbatim in the fetched page. A verdict without receipts becomes "needs human". |
+
+Verdicts: `not_grounded` (fabricated references), `likely_invalid` (code contradicts the central claim),
+`policy_question` (behavior is real, the project's own "not security issues" policy may exclude it),
+`insufficient_info`, `needs_human`, `likely_valid`.
+ProveIt never closes a report; it tells the maintainer where to look and drafts the reply.
+
+Example (`uv run proveit triage 2887487`, an AI-slop report claiming a buffer overflow in `Curl_inet_ntop`):
+Ultra marks the overflow claims contradicted, citing the length checks at `lib/inet_ntop.c:76` and `:173` that run
+before every `strcpy`, while conceding the two true details (the `DEBUGASSERT` is debug-only; the wrapper itself does
+not check size). 10 of 10 citations verified, $0.017, 13 seconds.
 
 ## Evaluation data
 
@@ -30,15 +40,40 @@ It is built on NVIDIA Nemotron models served by Nebius Token Factory.
   ever shown to a checker or model; triage outcomes are kept apart so labels cannot leak.
 - Reports are split into dev and test by a hash of their id. Rules were designed on dev failures only.
 
-## Day 1 result: existence checks alone catch little slop
+## Results on held-out reports
 
-On the held-out test split (18 slop, 59 real), the decisive "fabrication" verdict flags **2/18 slop reports (11%)**
-and **0/59 real CVE reports**. On dev it flags 2/31 slop and 0/89 real.
+The pipeline was developed on the dev split (120 reports) and run once on the held-out test split (77 reports:
+18 AI slop, 59 behind real curl CVEs). Test numbers, with 95% bootstrap intervals:
 
-The finding behind that number: most curl slop does not invent code. It cites real files and real functions
-(`Curl_inet_ntop`, `curl_mfprintf`, `lib/cookie.c`) and then makes false claims about them. So the grounding layer's
-main job is to retrieve the exact real code each claim is about, for the Nemotron stage to judge. Full results,
-including every false alarm and miss: `runs/grounding/summary.md` after running the eval.
+| Outcome | AI slop (18) | Real CVE reports (59) |
+|---|---|---|
+| Deprioritized: `not_grounded` or `likely_invalid`, with cited code | **5** (28%, 11–50%) | **2** (3%, 0–8%) |
+| `policy_question`: behavior real, curl's own policy may exclude it | 4 | 3 |
+| `needs_human` or `insufficient_info` | 9 | 32 |
+| `likely_valid` with verified line citations | **0** | **22** (37%) |
+
+- No slop report was called likely valid. Of the real CVE reports submitted in 2026, after Nemotron 3 Ultra was
+  released and so not recallable from training, 15 of 21 were confirmed with code citations.
+- Cost: $1.34 for the 77 reports ($0.017 each); Nano extraction is 1.4% of that.
+- The judge made 490 citations; 440 point at code or sources it was shown. The 50 that do not are discarded, and a
+  verdict that loses its receipts becomes `needs_human` (17 verdicts on test).
+- The two false alarms (CVE-2023-38546, CVE-2022-27776) are subtle: the judge read the first as intended cookie
+  behavior and misread a redirect condition in the second. Both are listed in `runs/triage/test-v1/summary.md`.
+
+Grounding alone (no model) flags 2/18 slop and 0/59 real reports on test: most slop does not invent code, it
+cites real functions and lies about them. That is why the Nemotron stage exists.
+
+### What changed during development (dev split only)
+
+| Version | Change | Slop flagged | Real flagged | Slop called valid |
+|---|---|---|---|---|
+| dev-v1 | first full pipeline | 16/31 | 5/89 | 0 |
+| dev-v2 | receipts must be on central claims; evidence shows the latest release next to master | 12/31 | 0/89 | 3 |
+| dev-v3 | judge applies curl's own "not security issues" policy, as of the report's revision | 18/31 | 2/89 | 0 |
+| dev-v4 | a policy-only rejection with the flaw confirmed becomes `policy_question` | 11/31 (+7 policy questions) | 0/89 (+2) | 0 |
+
+dev-v1's false alarms came from judging code that had changed after the release the reporter read; dev-v2 fixed that
+by showing the release version of each changed function with the commits in between.
 
 ## Setup
 
@@ -49,7 +84,10 @@ uv run proveit smoke              # lists Nemotron models on your account and ma
 uv run proveit fetch-repo         # clones curl with full history into vendor/
 uv run proveit dataset            # fetches and labels the 197 curl reports (about 3 minutes, 1 request/second)
 uv run proveit eval               # grounding checker over the dataset
-uv run proveit ground 2887487     # one report's findings as JSON
+uv run proveit ground 2887487     # one report's grounding findings as JSON
+uv run proveit triage 2887487     # full triage: grounding, Nano claims, evidence, Ultra judgment, receipts
+uv run proveit triage-eval --split dev   # full triage over a split, scored (responses are cached on disk)
+uv run proveit adversarial        # red-team reports (prompt injection, fake quotes...) through the real pipeline
 uv run pytest
 ```
 

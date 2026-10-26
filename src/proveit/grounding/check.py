@@ -65,6 +65,9 @@ class GroundingResult:
     rev_source: str
     verdict: str
     findings: list[Finding] = field(default_factory=list)
+    cited: list[str] = field(default_factory=list)  # curl source files the report cites, resolved
+    symbols: list[str] = field(default_factory=list)  # curl symbols the report names that exist
+    lines: list[tuple[str, int, int]] = field(default_factory=list)  # (path, start, end) line refs that exist
 
     @property
     def counts(self) -> dict[str, int]:
@@ -78,6 +81,7 @@ class GroundingResult:
 
     def to_dict(self) -> dict:
         return {"rev": self.rev, "rev_source": self.rev_source, "verdict": self.verdict, "counts": self.counts,
+                "cited": self.cited, "symbols": self.symbols, "lines": self.lines,
                 "findings": [asdict(f) for f in self.findings]}
 
 
@@ -109,7 +113,8 @@ def _ver_tuple(v: str) -> tuple[int, ...]:
 
 def _pick_rev(repo: Repo, ex: Extracted, submitted_at: str) -> tuple[str | None, str]:
     for ref in ex.files:
-        if ref.rev and re.fullmatch(r"[0-9a-fA-F]{7,40}", ref.rev):
+        # Commit and release-tag permalinks pin a revision; branch names like "master" do not (they move).
+        if ref.rev and (re.fullmatch(r"[0-9a-fA-F]{7,40}", ref.rev) or re.fullmatch(r"curl-\d+_\d+(_\d+)?", ref.rev)):
             sha = repo.resolve(ref.rev)
             if sha:
                 return sha, f"permalink {ref.rev[:12]}"
@@ -367,6 +372,53 @@ def _check_versions_commits_cves(repo: Repo, ex: Extracted, rev: str, findings: 
                                 "a published curl CVE" if known else "not a curl CVE (may concern another project)"))
 
 
+def _definition_files(repo: Repo, rev: str, names: list[str]) -> list[str]:
+    """Files under lib/ and src/ that define any of these functions (name at the start of a line, followed by "(")."""
+    files: list[str] = []
+    for name in names[:8]:
+        out = repo._git("grep", "-l", "-E", rf"^([A-Za-z_][A-Za-z0-9_ \*]*[ \*])?{re.escape(name)}\s*\(", rev, "--", "lib", "src", check=False)
+        for line in out.split("\n"):
+            path = line.split(":", 1)[-1]
+            if path.endswith(".c") and path not in files:
+                files.append(path)
+    return files
+
+
+def _fit(repo: Repo, ex: Extracted, rev: str) -> float:
+    """How well a revision matches what the report shows: cited lines that contain the symbols it names,
+    "line N" mentions whose sentence names code found near that line, and quoted lines found in cited files."""
+    names = [n for n in list(ex.identifiers) + sorted(ex.members) if len(n) >= 4]
+    score = 0.0
+    if ex.line_mentions:
+        candidates = [r.path for r in ex.files if not r.rev]
+        candidates = [p for p in (_resolve_cited(repo, rev, c) for c in candidates) if p]
+        candidates += [p for p in _definition_files(repo, rev, [n for _, ns in ex.line_mentions for n in ns]) if p not in candidates]
+        texts = [(repo.read(rev, p) or "").splitlines() for p in candidates[:6]]
+        for line_no, mentioned in ex.line_mentions[:20]:
+            for lines in texts:
+                window = "\n".join(lines[max(0, line_no - 4) : line_no + 3])
+                if any(re.search(rf"\b{re.escape(n)}\b", window) for n in mentioned):
+                    score += 1
+                    break
+    for ref in ex.files:
+        if ref.rev or not ref.line_start:
+            continue
+        path = _resolve_cited(repo, rev, ref.path)
+        lines = (repo.read(rev, path) or "").splitlines() if path else []
+        if path and ref.line_start <= len(lines):
+            window = "\n".join(lines[max(0, ref.line_start - 4) : (ref.line_end or ref.line_start) + 3])
+            score += any(re.search(rf"\b{re.escape(n)}\b", window) for n in names)
+    for block in ex.blocks:
+        if block.kind != "quote":
+            continue
+        sub = _quote_lines(block.text, block.lang)
+        paths = [block.path] if block.path else [r.path for r in ex.files if not r.rev]
+        texts = [_norm(repo.read(rev, p) or "") for p in (_resolve_cited(repo, rev, q) for q in paths) if p]
+        if sub and texts:
+            score += sum(any(l in t for t in texts) for l in sub) / len(sub)
+    return score
+
+
 def ground_report(report: dict, repo: Repo | None = None) -> GroundingResult:
     """`report` is a dataset `input` dict: title, body, submitted_at, attachments."""
     repo = repo or Repo()
@@ -375,6 +427,15 @@ def ground_report(report: dict, repo: Repo | None = None) -> GroundingResult:
     rev, rev_source = _pick_rev(repo, ex, submitted)
     if not rev:
         return GroundingResult(rev=None, rev_source=rev_source, verdict="nothing_to_check")
+    if rev_source.startswith("master on"):
+        # Reporters often read a release rather than master. Use the revision their line numbers and quotes fit best;
+        # master wins ties.
+        best = (_fit(repo, ex, rev), rev, rev_source)
+        for alt, tag in _alt_revs(repo, ex, rev, submitted):
+            score = _fit(repo, ex, alt)
+            if score > best[0]:
+                best = (score, alt, f"release {tag} (fits the report's line numbers and quotes better than master on {submitted[:10]})")
+        _, rev, rev_source = best
 
     findings: list[Finding] = []
     idents_at_rev = repo.identifiers(rev)
@@ -384,7 +445,16 @@ def ground_report(report: dict, repo: Repo | None = None) -> GroundingResult:
     _check_quotes(repo, ex, rev, alts, cited, submitted, findings)
     _check_versions_commits_cves(repo, ex, rev, findings)
 
-    result = GroundingResult(rev=rev, rev_source=rev_source, verdict="", findings=findings)
+    result = GroundingResult(rev=rev, rev_source=rev_source, verdict="", findings=findings, cited=cited)
+    for f in findings:
+        if f.check == "symbol" and f.status == "grounded":
+            name = f.claim.split(" in ")[0]
+            if name not in result.symbols:
+                result.symbols.append(name)
+        elif f.check == "line" and f.status != "ungrounded":
+            m = re.fullmatch(r"(.+):(\d+)(?:-(\d+))?", f.claim)
+            if m:
+                result.lines.append((m.group(1), int(m.group(2)), int(m.group(3) or m.group(2))))
     c = result.counts
     if c["ungrounded_strong"]:
         result.verdict = "not_grounded"

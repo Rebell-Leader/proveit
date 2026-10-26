@@ -135,6 +135,16 @@ class Repo:
         m = re.search(r'#define LIBCURL_VERSION "([\d.]+)', self.read(rev, "include/curl/curlver.h") or "")
         return m.group(1) if m else None
 
+    @lru_cache(maxsize=256)
+    def security_policy(self, rev: str) -> str | None:
+        """The "Not security issues" section of curl's disclosure policy at a revision, if it has one."""
+        text = self.read(rev, "docs/VULN-DISCLOSURE-POLICY.md") or ""
+        start = text.find("\n# Not security issues")
+        if start < 0:
+            return None
+        end = text.find("\n# ", start + 5)
+        return text[start + 1 : end if end > 0 else None].strip()[:12_000]
+
     def is_banned(self, rev: str, func: str) -> bool:
         """Does curl's own source checker (checksrc.pl) refuse this function at this revision?"""
         names, pattern = self._banned(rev)

@@ -1,66 +1,59 @@
 {% extends "base.html" %}
-{% block title %}Results and method · ProveIt{% endblock %}
+{% block title %}Results & limitations · ProveIt{% endblock %}
 {% set test = summaries['test-v1'] %}
-{% set dev = summaries['dev-v4'] %}
 {% block content %}
-<section class="hero" style="padding-bottom:6px">
-  <div class="eyebrow">Results</div>
-  <h1 style="font-size:clamp(26px,4vw,38px)">How well does it work?</h1>
-  <p class="lead">Measured on curl's own public record: 49 reports its maintainer lists as AI slop, and 148 HackerOne
-    reports behind published curl CVEs. The pipeline only ever sees a report's title, text and submission date.</p>
+<section class="hero page-hero">
+  <div class="eyebrow">Results & limitations</div>
+  <h1>Evidence helps.<br>The model still makes mistakes.</h1>
+  <p class="lead">We tested ProveIt on 77 curl reports held back during development. It found useful evidence in both false alarms and real bugs. It also got two real bugs wrong.</p>
 </section>
 
-<section class="section">
-  <h2>Held-out test: {{ test.overall.n_slop }} slop, {{ test.overall.n_valid }} real</h2>
-  <p>Reports were split into dev and test by a hash of their id before any work started. Everything was designed on dev;
-    this is the single run on test.</p>
-  <table class="table">
-    <thead><tr><th>ProveIt's verdict</th><th class="num">AI slop</th><th class="num">Real CVE reports</th></tr></thead>
-    <tbody>
-      {% for key, (label, tone, _) in VERDICTS.items() if key != 'error' %}
-        <tr><td><span class="chip {{ tone }}"><span class="dot"></span>{{ label }}</span></td>
-          <td class="num">{{ test.confusion.slop.get(key, 0) }}</td><td class="num">{{ test.confusion.valid.get(key, 0) }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <p class="note" style="margin-top:10px">Cost of the 77 reports: {{ test.spend.split(',')[1].split('\n')[0] if ',' in test.spend else test.spend }}.
-    Deprioritized slop: {{ test.overall.slop_flagged }}/{{ test.overall.n_slop }}
-    ({{ '%.0f' % (test.overall.slop_ci[0] * 100) }}–{{ '%.0f' % (test.overall.slop_ci[1] * 100) }}% at 95%).
-    Real reports wrongly deprioritized: {{ test.overall.valid_flagged }}/{{ test.overall.n_valid }}.</p>
-</section>
-
-<section class="section">
-  <h2>What we learned building it (dev split only)</h2>
-  <table class="table">
-    <thead><tr><th>Version</th><th>Change</th><th class="num">Slop flagged</th><th class="num">Real flagged</th><th class="num">Slop called valid</th></tr></thead>
-    <tbody>
-      <tr><td>grounding only</td><td>Existence checks, no model</td><td class="num">2/31</td><td class="num">0/89</td><td class="num">–</td></tr>
-      <tr><td>v1</td><td>Nano claims + Ultra judgment over real code</td><td class="num">16/31</td><td class="num">5/89</td><td class="num">0</td></tr>
-      <tr><td>v2</td><td>Receipts must back a central claim; show the release version next to master</td><td class="num">12/31</td><td class="num">0/89</td><td class="num">3</td></tr>
-      <tr><td>v3</td><td>Apply curl's own "not security issues" policy, as of the report's revision</td><td class="num">18/31</td><td class="num">2/89</td><td class="num">0</td></tr>
-      <tr><td>v4</td><td>A policy-only rejection of a confirmed flaw becomes a policy question</td><td class="num">{{ dev.overall.slop_flagged }}/31</td><td class="num">{{ dev.overall.valid_flagged }}/89</td><td class="num">0</td></tr>
-    </tbody>
-  </table>
-  <div class="panel stack" style="margin-top:14px">
-    <p><b>Most slop does not invent code.</b> Existence checks alone caught 2 of 31 dev slop reports. The rest cite real
-      functions and make false claims about them, which is why the judgment stage reads the real code.</p>
-    <p><b>Reporters read releases, not master.</b> All five v1 false alarms were real 2026 reports about code that master
-      had already changed by the time they were filed. Showing the release version of each changed function, with the
-      commits in between, removed them.</p>
-    <p><b>The judge can be fooled; receipts catch it.</b> On one slop report, Ultra "confirmed" a quote of nghttp2's
-      documentation that the report invented. The quote was not in the fetched page, so the verdict was withdrawn.</p>
+<section class="section results-preview">
+  <h2>What happened in the test</h2>
+  <p>{{ test.overall.n_slop }} reports labeled AI slop by curl's maintainer. {{ test.overall.n_valid }} reports linked to published vulnerabilities.</p>
+  <div class="stats">
+    <div class="stat"><b>{{ test.overall.slop_flagged }} / {{ test.overall.n_slop }}</b><span>slop reports flagged for lower priority</span></div>
+    <div class="stat"><b>{{ test.overall.valid_confirmed }} / {{ test.overall.n_valid }}</b><span>real bugs supported by cited code</span></div>
+    <div class="stat caution"><b>{{ test.overall.valid_flagged }} / {{ test.overall.n_valid }}</b><span>real bugs wrongly flagged for lower priority</span></div>
   </div>
+  <p class="note">No slop report was marked likely valid. Of the rest, most needed human investigation, more information, or a policy decision.</p>
+  <details class="results-breakdown"><summary>See every finding</summary>
+  <div class="table-scroll"><table class="table">
+    <thead><tr><th>ProveIt's finding</th><th class="num">Labeled AI slop</th><th class="num">Known vulnerabilities</th></tr></thead>
+    <tbody>{% for key, (label, tone, _) in VERDICTS.items() if key != 'error' %}<tr><td><span class="chip {{ tone }}">{{ label }}</span></td><td class="num">{{ test.confusion.slop.get(key, 0) }}</td><td class="num">{{ test.confusion.valid.get(key, 0) }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="note">For the proportion flagged for lower priority, 95% bootstrap intervals are {{ '%.0f' % (test.overall.slop_ci[0] * 100) }}–{{ '%.0f' % (test.overall.slop_ci[1] * 100) }}% for slop and {{ '%.0f' % (test.overall.valid_ci[0] * 100) }}–{{ '%.0f' % (test.overall.valid_ci[1] * 100) }}% for real reports. This is a small test set.</p>
+  </details>
 </section>
 
 <section class="section">
-  <h2>Limitations</h2>
+  <div class="eyebrow">Where it failed</div><h2>Two real bugs deserved more attention.</h2>
+  <div class="failure-grid">
+    <a class="example-card" href="{{ u('/r/2148242') }}"><span class="chip warn">False alarm · CVE-2023-38546</span><h3>Misread cookie behavior</h3><p>The model treated cookie injection through a file named “none” as intended behavior.</p><span class="example-link">Inspect the mistake →</span></a>
+    <a class="example-card" href="{{ u('/r/1547048') }}"><span class="chip warn">False alarm · CVE-2022-27776</span><h3>Misread a redirect condition</h3><p>The model missed an authentication and cookie leak in the redirect logic.</p><span class="example-link">Inspect the mistake →</span></a>
+  </div>
+  <p class="note">These failures are why ProveIt provides evidence for a maintainer to review and never closes a report.</p>
+</section>
+
+<section class="section how-section">
+  <div><div class="eyebrow">The AI gets checked too</div><h2>{{ test.receipts_overrides }} judgments<br>were withdrawn.</h2></div>
+  <div class="stack"><p>The model produced {{ test.valid_citations + test.invalid_citations }} citations. {{ test.invalid_citations }} did not point to evidence it had been shown. Invalid citations are discarded; a judgment that loses required evidence becomes “Needs human review.”</p><p>A valid citation means the referenced line exists in the evidence. The model can still misunderstand it.</p><a class="text-link" href="{{ u('/r/3506159') }}">See a made-up quote get caught →</a></div>
+</section>
+
+<section class="section">
+  <h2>What this test can tell us</h2>
   <div class="panel stack">
-    <p>Two real CVE reports in the test split were wrongly deprioritized: CVE-2023-38546 (the judge read cookie loading
-      from a file named "none" as intended behavior) and CVE-2022-27776 (it misread a redirect condition).</p>
-    <p>The evaluation uses one project. curl is a demanding case (C, 40,000 commits, a strict security policy), but other
-      projects will need their own source paths and policy file.</p>
-    <p>Most real reports end at "needs a human": ProveIt is built to be safe, not decisive, when the evidence is mixed.</p>
-    <p>Reproduction of proof-of-concept code in a sandbox is not implemented yet; verdicts come from reading code.</p>
+    <p><b>One project.</b> The current implementation supports curl. Results do not establish how well it works on other repositories.</p>
+    <p><b>Reading code is not running it.</b> These results cover reference checks and model analysis. Optional offline sandbox reproduction is implemented separately and is shown in a <a href="{{ u('/r/4024222') }}">saved example</a>; it is not included in these scores.</p>
+    <p><b>Uncertainty is common.</b> 32 of 59 real reports needed human review or more information. Three more needed a policy decision.</p>
   </div>
+  <details class="method-details"><summary>Dataset, method & cost</summary>
+    <div class="stack">
+      <p>The full collection contains <a href="https://gist.github.com/bagder/07f7581f6e3d78ef37dfbfc81fd1d1cd">49 reports labeled AI slop by curl's maintainer</a> and <a href="https://curl.se/docs/vuln.json">148 HackerOne reports linked to curl CVEs</a>. Reports were split by a hash of their IDs: 120 for development and 77 for the held-out test.</p>
+      <p>Rules were developed on the development split, then evaluated once on the test split. Checkers and models receive only the report's title, body, date and attachment names. Triage discussion, labels and CVE mappings are withheld.</p>
+      <p>The test cost $1.34 in model calls, about $0.017 per report. This excludes optional sandbox reproduction and external documentation search.</p>
+      <p>Reference checks alone flagged 2 of 18 slop reports and none of the 59 real reports. Many misleading reports cite real code; the harder question is whether their claims match its behavior.</p>
+    </div>
+  </details>
 </section>
 {% endblock %}

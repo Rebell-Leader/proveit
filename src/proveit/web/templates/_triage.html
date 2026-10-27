@@ -1,37 +1,43 @@
 {%- macro slug(s) -%}{{ s | replace('/', '-') | replace('.', '-') | replace('@', '-') }}{%- endmacro -%}
 
 <div class="verdict">
-  <div class="panel verdict-main {{ v.tone }}">
-    <h3>ProveIt's verdict</h3>
-    <div class="big">{{ v.final_label }}</div>
-    <p>{{ v.explain }}</p>
-    {% if v.confidence is not none %}<span class="chip outline">judge confidence {{ '%.0f' % (v.confidence * 100) }}%</span>{% endif %}
-    {% if v.policy_section %}<span class="chip warn">curl policy: {{ v.policy_section }}</span>{% endif %}
-    {% if v.receipts_override %}
-      <div class="override"><b>Receipts check:</b> {{ v.receipts_override }}{% if v.judge_verdict %} (the judge itself said <code>{{ v.judge_verdict }}</code>){% endif %}.</div>
-    {% endif %}
-    {% if v.key_reasons %}
-      {% if v.receipts_override %}<p class="note" style="margin:12px 0 0">The judge's reasoning, withdrawn by the receipts check:</p>{% endif %}
-      <ul class="reasons" {% if v.receipts_override %}style="opacity:.7"{% endif %}>{% for r in v.key_reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+  <div class="panel report-claim">
+    <h3>What the report claims</h3>
+    <p class="claim-summary">{{ v.spotlight.claim if v.spotlight else v.summary or 'No checkable claim could be extracted.' }}</p>
+    {% if v.truth %}
+      <details class="recorded-outcome"><summary>Compare with curl's recorded outcome</summary>
+        <p><span class="chip {{ v.truth.tone }}">{{ 'Labeled AI slop' if v.truth_label == 'slop' else 'Known vulnerability' }}</span></p>
+        <p>{{ v.truth.text }}</p><p class="note">Shown for comparison after analysis. The pipeline did not see this label.</p>
+      </details>
     {% endif %}
   </div>
-  <div class="panel">
-    {% if v.truth %}
-      <h3>What actually happened</h3>
-      <div class="truth"><span class="chip {{ v.truth.tone }}"><span class="dot"></span>{{ 'AI slop' if v.truth_label == 'slop' else 'Real vulnerability' }}</span></div>
-      <p>{{ v.truth.text }}</p>
-      <p class="note">This label comes from curl's public records. ProveIt never saw it.</p>
-    {% else %}
-      <h3>Report</h3>
-      <p>{{ v.summary }}</p>
+  <div class="panel verdict-main {{ v.tone }}">
+    <h3>ProveIt's finding</h3>
+    <div class="big">{{ v.final_label }}</div>
+    <p>{{ v.spotlight.finding if v.spotlight else v.explain }}</p>
+    {% if v.policy_section %}<span class="chip warn">curl policy: {{ v.policy_section }}</span>{% endif %}
+    {% if v.receipts_override %}<div class="override"><b>Judgment withdrawn.</b> The answer failed the evidence check.</div>{% endif %}
+    {% if v.key_reasons %}
+      <details class="reasoning-details"><summary>{{ 'See the withdrawn model reasoning' if v.receipts_override else 'Why this finding?' }}</summary>
+        {% if v.receipts_override %}<p class="note">The following reasoning failed the citation check and does not support the final finding.</p>{% endif %}
+        <ul class="reasons">{% for r in v.key_reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+      </details>
     {% endif %}
-    {% if v.missing_info %}
-      <h3 style="margin-top:14px">What's missing</h3>
-      <ul class="reasons">{% for m in v.missing_info %}<li>{{ m }}</li>{% endfor %}</ul>
-    {% endif %}
+    {% if v.missing_info %}<details><summary>What still needs checking</summary><ul class="reasons">{% for m in v.missing_info %}<li>{{ m }}</li>{% endfor %}</ul></details>{% endif %}
   </div>
 </div>
 
+{% if v.spotlight and v.spotlight.rows %}
+<div class="spotlight-proof">
+  <div class="proof-caption"><span class="eyebrow">The key evidence</span><h2>{{ 'The guard before the copy' if v.id == 2887487 else 'The cleanup path' }}</h2><p>{{ 'If the buffer is too small, the function returns. The copy comes after that check.' if v.id == 2887487 else 'Each nested part enters cleanup again. Deep enough nesting exhausts the stack.' }}</p><a class="text-link" href="#L-{{ slug(v.spotlight.file) }}-{{ v.spotlight.line }}">Inspect {{ v.spotlight.file }}:{{ v.spotlight.line }} →</a></div>
+  <div class="code focus-code"><div class="code-head"><b>{{ v.spotlight.file }}@{{ v.grounding.rev }}</b><span>Source from the saved analysis</span></div><div class="code-body"><table>{% for row in v.spotlight.rows %}<tr class="{{ 'hit' if row.n == v.spotlight.line }}"><td class="ln">{{ row.n }}</td><td class="src">{{ row.text }}</td></tr>{% endfor %}</table></div></div>
+</div>
+{% endif %}
+
+<details class="technical-details">
+<summary>How this analysis ran <span>{{ v.claims | length }} claims · {{ v.citations.valid or 0 }} citations verified</span></summary>
+{% if v.receipts_override %}<p class="note"><b>Evidence check:</b> {{ v.receipts_override }}</p>{% endif %}
+<p class="note">Checked against curl {{ v.grounding.rev_source }} (<code>{{ v.grounding.rev }}</code>).{% if v.split %} {{ v.split | capitalize }} evaluation split.{% endif %} Citation verification checks that a referenced line was in the evidence; it does not prove the model interpreted it correctly.</p>
 <div class="timeline" aria-label="Which model did what">
   <div class="tl done">
     <div class="k">1 · Grounding</div>
@@ -67,14 +73,16 @@
   {% endif %}
 </div>
 
+</details>
+
 {% if v.reproduction and v.reproduction.attempted %}
 <div class="panel repro {{ v.reproduction.tone }}">
-  <h3>Reproduction in a Nebius sandbox</h3>
-  <div class="big">{{ v.reproduction.headline }}</div>
+  <h3>Proof-of-concept result</h3>
+  <div class="big">{{ "Stack overflow caught inside curl" if v.reproduction.outcome == "reproduced" else v.reproduction.headline }}</div>
   <p>{{ v.reproduction.explain }}</p>
-  <p class="note">The report's proof of concept was compiled against curl {{ v.reproduction.version }}, built from source
-    with AddressSanitizer and UBSan, and run in an isolated VM with networking disabled. ProveIt never runs report
-    code on its own host.{% if v.reproduction.expected %} Expected: {{ v.reproduction.expected }}{% endif %}</p>
+  {% if v.reproduction.signature %}<div class="repro-signature">{{ v.reproduction.signature }}</div>{% endif %}
+  <p class="note">Saved sandbox run · The proof of concept was compiled against curl {{ v.reproduction.version }}, built from source
+    with AddressSanitizer and UBSan, then run in an isolated VM with networking disabled.{% if v.reproduction.expected %} Expected: {{ v.reproduction.expected }}{% endif %}</p>
   {% if v.reproduction.missing_symbols %}
     <p>Missing from this libcurl: {% for s in v.reproduction.missing_symbols %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
   {% endif %}
@@ -95,8 +103,17 @@
 <div class="panel"><p class="note"><b>Reproduction:</b> not attempted — {{ v.reproduction.reason }}.</p></div>
 {% endif %}
 
+{% if v.reply %}
+<details class="panel draft-reply"><summary>{{ "Inspect the withdrawn draft reply" if v.receipts_override else "Review a draft reply to the reporter" }}</summary><p class="note">{{ "This draft belongs to the withdrawn judgment. It may contain unsupported claims." if v.receipts_override else "Edit and verify before sending." }}</p><p class="reply" id="reply-{{ v.id or 'live' }}">{{ v.reply }}</p>{% if not v.receipts_override %}<button class="btn" data-copy="#reply-{{ v.id or 'live' }}">Copy draft</button>{% endif %}</details>
+{% endif %}
+
+<details class="evidence-details" id="evidence">
+  <summary>Inspect all claims and source code <span>{{ v.claims | length }} claims · {{ v.code | length }} code excerpts</span></summary>
+  {% if v.receipts_override %}<p class="error">This model judgment was withdrawn. The claim assessments below are preserved for inspection and may be wrong.</p>{% endif %}
 <div class="cols">
+
   <div class="stack">
+    <h2 class="column-heading">Report claims</h2>
     <div class="claims">
       {% for c in v.claims %}
         <div class="claim">
@@ -105,7 +122,7 @@
             <span class="chip {{ c.tone }}" style="margin-left:auto">{{ c.status }}</span>
           </div>
           <p class="text">{{ c.text }}</p>
-          {% if c.reasoning %}<p class="why">{{ c.reasoning }}</p>{% endif %}
+          {% if c.reasoning %}<details class="claim-reasoning"><summary>Read the reasoning</summary><p class="why">{{ c.reasoning }}</p></details>{% endif %}
           {% if c.citations %}
             <div class="cites">
               {% for x in c.citations %}
@@ -148,22 +165,16 @@
       </div>
     {% endif %}
 
-    {% if v.reply %}
-      <div class="panel">
-        <h3>Draft reply to the reporter</h3>
-        <p class="reply" id="reply-{{ v.id or 'live' }}">{{ v.reply }}</p>
-        <button class="btn" data-copy="#reply-{{ v.id or 'live' }}">Copy reply</button>
-      </div>
-    {% endif %}
-
-    <div class="panel">
-      <h3>The report{% if v.source_url %} · <a href="{{ v.source_url }}" rel="noopener" target="_blank">full text on HackerOne</a>{% endif %}</h3>
+    <details class="panel original-report">
+      <summary>Read the original report{% if v.excerpt_truncated %} (excerpt){% endif %}</summary>
+      {% if v.source_url %}<p><a href="{{ v.source_url }}" rel="noopener" target="_blank">Full report on HackerOne ↗</a></p>{% endif %}
       <div class="excerpt">{{ v.excerpt }}{% if v.excerpt_truncated %}
 …{% endif %}</div>
-    </div>
+    </details>
   </div>
 
   <div>
+    <h2 class="column-heading">Source code</h2>
     {% for s in v.code %}
       <div class="code">
         <div class="code-head"><b>{{ s.name }}</b><span>lines {{ s.start }}–{{ s.end }} · {{ s.reason }}</span></div>
@@ -186,7 +197,9 @@
         {% endif %}
       </div>
     {% else %}
-      <div class="panel"><p class="note">No curl code could be retrieved for this report: it names no curl function, file or line that exists.</p></div>
+      <div class="panel"><p class="note">No source code was retrieved for this analysis. The evidence may be incomplete.</p></div>
     {% endfor %}
   </div>
 </div>
+
+</details>

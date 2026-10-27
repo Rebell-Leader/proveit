@@ -5,13 +5,13 @@ from __future__ import annotations
 from proveit.grounding.repo import Repo
 
 VERDICTS = {
-    "not_grounded": ("Cites code that does not exist", "bad", "The report names files, functions or code that are not in curl."),
-    "likely_invalid": ("Code contradicts the report", "bad", "The real code disproves the report's central claim."),
-    "policy_question": ("Real behavior, maybe not a security issue", "warn",
+    "not_grounded": ("References do not check out", "bad", "Key code references could not be verified in the targeted curl version."),
+    "likely_invalid": ("Code contradicts the claim", "bad", "The code provides evidence against the report's central claim. Review the cited lines before deciding."),
+    "policy_question": ("Needs a policy review", "warn",
                         "The code does what the report says, but curl's own policy may exclude it. A maintainer decides."),
-    "insufficient_info": ("Not enough to check", "muted", "The report does not name a concrete code path or reproduction."),
-    "needs_human": ("Needs a human", "muted", "The evidence does not settle it either way."),
-    "likely_valid": ("Confirmed by the code", "good", "The real code shows the flaw the report describes."),
+    "insufficient_info": ("More detail needed", "muted", "There is not enough information to verify the reported bug."),
+    "needs_human": ("Needs human review", "muted", "The available evidence does not settle the report. A maintainer should investigate."),
+    "likely_valid": ("Code supports the claim", "good", "The code supports the reported flaw. A maintainer should review its impact and decide what to do next."),
     "error": ("Could not finish", "muted", "The pipeline did not complete for this report."),
 }
 STATUS = {"supported": ("supported", "good"), "contradicted": ("contradicted", "bad"), "not_verifiable": ("not verifiable", "muted")}

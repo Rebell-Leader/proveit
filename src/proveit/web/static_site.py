@@ -14,6 +14,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from proveit.web.demo import DEMO_DIR
 from proveit.web.view import VERDICTS
+from proveit.web.presentation import present_report
 
 HERE = Path(__file__).parent
 
@@ -45,7 +46,7 @@ def build(out_dir: Path, live_url: str | None) -> dict:
     page("live.html", "/live", "live.html", live_url=(live_url or "").rstrip("/") or None, budget={"spent_today": 0, "daily_budget": 0})
     reports = sorted((DEMO_DIR / "reports").glob("*.json"))
     for path in reports:
-        view = json.loads(path.read_text())
+        view = present_report(json.loads(path.read_text()))
         page("report.html", f"/r/{view['id']}", f"r/{view['id']}.html", v=view)
     shutil.copytree(HERE / "static", out_dir / "static")
     return {"pages": 3 + len(reports), "bytes": sum(f.stat().st_size for f in out_dir.rglob("*") if f.is_file())}

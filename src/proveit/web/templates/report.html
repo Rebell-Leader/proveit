@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ v.title }} · ProveIt{% endblock %}
 {% block content %}
-  <div class="crumbs"><a href="{{ u('/') }}">Reports</a> / HackerOne #{{ v.id }}</div>
-  <h1 class="report-title">{{ v.title }}</h1>
-  <div class="meta">
-    <span>Submitted {{ v.submitted }}</span>
-    <span>Checked against curl {{ v.grounding.rev_source }} (<code>{{ v.grounding.rev }}</code>)</span>
-    <span>{{ v.split }} split</span>
-    <span>${{ '%.3f' % v.cost }} · {{ v.seconds }}s</span>
-  </div>
+  <div class="crumbs"><a href="{{ u('/') }}#examples">Examples</a> <span>/</span> Report #{{ v.id }} <span class="saved-label">Saved analysis</span></div>
+  {% if v.spotlight %}<div class="eyebrow">{{ v.spotlight.kicker }}</div>{% endif %}
+  <h1 class="report-title">{{ v.spotlight.headline if v.spotlight else v.title }}</h1>
+  {% if v.spotlight %}<p class="report-subtitle">{{ v.title }}</p>{% endif %}
+  <div class="meta"><span>curl · {{ v.submitted }}</span><span>{{ v.seconds }}s analysis · ${{ '%.3f' % v.cost }} in model calls</span></div>
   {% include "_triage.html" %}
+  {% if v.spotlight %}
+  <nav class="demo-next" aria-label="Continue the examples"><a href="{{ u('/') }}#examples">All examples</a><a class="btn primary" href="{{ u('/r/' ~ v.spotlight.next) if v.spotlight.next else u('/results') }}">{{ v.spotlight.next_label }} <span aria-hidden="true">→</span></a></nav>
+  {% endif %}
 {% endblock %}

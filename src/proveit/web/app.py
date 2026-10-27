@@ -23,18 +23,12 @@ from proveit.grounding.repo import CURL_DIR, Repo
 from proveit.web.budget import Budget
 from proveit.web.demo import DEMO_DIR
 from proveit.web.view import VERDICTS, to_view
+from proveit.web.presentation import EXAMPLES, present_report
 
 HERE = Path(__file__).parent
 MAX_BODY = 30_000
 MAX_REQUEST_BYTES = 64_000
 MAX_H1_BYTES = 1_000_000
-FEATURED = [
-    (2887487, "The code contradicts it", "An AI-written report claims a buffer overflow. Ultra finds the length check that runs before every copy."),
-    (3392174, "Cites code that does not exist", "The report points at lib/ws.c line 1287. That file was never that long."),
-    (3506159, "A fake quote, caught", "The report quotes nghttp2's docs. The judge believed it; the receipts check did not."),
-    (4099618, "A real bug, confirmed", "Fourteen line citations across three files trace a connection-reuse flaw."),
-    (3969300, "Fixed on master, live in the release", "Master already has the fix; ProveIt shows the release the reporter read."),
-]
 H1_URL = re.compile(r"^https?://(?:www\.)?hackerone\.com/reports/(\d{4,9})/?$")
 
 @asynccontextmanager
@@ -59,7 +53,7 @@ def _index() -> dict:
 
 def _report(h1_id: int) -> dict | None:
     path = DEMO_DIR / "reports" / f"{h1_id}.json"
-    return json.loads(path.read_text()) if path.exists() else None
+    return present_report(json.loads(path.read_text())) if path.exists() else None
 
 
 def _client_ip(request: Request) -> str:
@@ -87,8 +81,9 @@ def home_context() -> dict:
     idx = _index()
     test = idx["summaries"].get("test-v1", {})
     by_id = {r["id"]: r for r in idx["reports"]}
-    featured = [{"id": i, "headline": h, "text": t, **by_id[i]} for i, h, t in FEATURED if i in by_id]
-    return {"reports": idx["reports"], "total": len(idx["reports"]), "featured": featured,
+    featured = [{**present_report(by_id[i]), **example} for i, example in EXAMPLES.items() if i in by_id]
+    return {"reports": [present_report(r) for r in idx["reports"]], "total": len(idx["reports"]), "featured": featured,
+            "hero": _report(2887487),
             "test": test.get("overall", {}), "test_confusion": test.get("confusion", {}), "test_spend": test.get("spend", "")}
 
 
@@ -101,7 +96,7 @@ def home(request: Request):
 def report_page(request: Request, h1_id: int):
     view = _report(h1_id)
     if not view:
-        raise HTTPException(404, "This report is not in the judge-mode set. Try it in live mode.")
+        raise HTTPException(404, "This report has no saved analysis. Try checking it live.")
     return templates.TemplateResponse(request, "report.html", {"v": view})
 
 

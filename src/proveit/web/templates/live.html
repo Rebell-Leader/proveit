@@ -1,51 +1,52 @@
 {% extends "base.html" %}
-{% block title %}Try a report live · ProveIt{% endblock %}
+{% block title %}Check a report · ProveIt{% endblock %}
 {% block content %}
-<section class="hero" style="padding-bottom:10px">
-  <div class="eyebrow">Live mode</div>
-  <h1 style="font-size:clamp(26px,4vw,38px)">Check a curl security report now</h1>
-  <p class="lead">Give a public HackerOne report URL, or paste a report. ProveIt checks it against curl's current source and
-    streams each stage as it runs. A run takes 15 to 60 seconds and calls NVIDIA Nemotron on Nebius Token Factory.</p>
+<section class="hero page-hero">
+  <div class="eyebrow">Check a report</div>
+  <h1>What does the code say?</h1>
+  <p class="lead">Paste a curl security report. ProveIt finds the relevant code and checks the claims against it. New analyses usually take 15–60 seconds.</p>
 </section>
 
 {% if live_url %}
-<div class="panel stack">
-  <p><b>Live mode runs on a separate server</b>, because this page is a static site that stays fast and free.
-    The server sleeps when nobody has used it for a while, so the first visit can take up to a minute to wake it.</p>
-  <p><a class="btn primary" href="{{ live_url }}/live">Open live mode</a></p>
-  <p class="note">Each run calls NVIDIA Nemotron on Nebius Token Factory. Runs are capped per visitor and per day.</p>
+<div class="panel live-handoff">
+  <h2>Ready to check a report?</h2>
+  <p>The live checker may take about a minute to wake up on your first visit.</p>
+  <p><a class="btn primary" href="{{ live_url }}/live">Open the live checker ↗</a></p>
+  <p class="note">For an instant walkthrough, <a href="{{ u('/r/2887487') }}">open a saved example</a>.</p>
 </div>
 {% else %}
 <div class="panel live-form">
-  <div class="tabs" role="tablist">
-    <button type="button" class="on" data-tab="url">HackerOne URL</button>
-    <button type="button" data-tab="text">Paste a report</button>
+  <div class="tabs" role="tablist" aria-label="Report input">
+    <button type="button" class="on" data-tab="url" role="tab" id="tab-url" aria-controls="pane-url" aria-selected="true">HackerOne link</button>
+    <button type="button" data-tab="text" role="tab" id="tab-text" aria-controls="pane-text" aria-selected="false" tabindex="-1">Paste report text</button>
   </div>
-  <div data-pane="url">
-    <input type="url" id="url" placeholder="https://hackerone.com/reports/…" autocomplete="off">
-    <p class="note">Reports already in judge mode open instantly from the saved results.</p>
+  <div data-pane="url" role="tabpanel" id="pane-url" aria-labelledby="tab-url">
+    <label class="field-label" for="url">Public HackerOne report URL</label>
+    <input type="url" id="url" placeholder="https://hackerone.com/reports/2887487" autocomplete="off">
+    <p class="note">A report in our collection opens its saved analysis instantly. New reports run through the live checker.</p>
   </div>
-  <div data-pane="text" class="hidden">
-    <input type="text" id="title" placeholder="Title" style="margin-bottom:8px">
-    <textarea id="body" placeholder="Report text, as the reporter wrote it (markdown is fine)"></textarea>
-    <div class="examples">Try:
-      <button type="button" data-example="fake">a report with an invented function</button>
-      <button type="button" data-example="injection">a prompt-injection attempt</button>
+  <div data-pane="text" class="hidden" role="tabpanel" id="pane-text" aria-labelledby="tab-text">
+    <label class="field-label" for="title">Report title</label><input type="text" id="title" placeholder="What is the reported bug?" maxlength="300">
+    <label class="field-label" for="body">Report text</label><textarea id="body" placeholder="Include the claimed bug, affected code, and steps to reproduce." maxlength="30000"></textarea>
+    <div class="examples">Load a sample:
+      <button type="button" data-example="fake">Invented function</button>
+      <button type="button" data-example="injection">Prompt injection</button>
     </div>
+    <p class="note">These two samples are synthetic. Pasted text is checked as a report submitted today.</p>
   </div>
-  <div><button class="btn primary" id="run">Check this report</button>
-    <span class="note" style="margin-left:10px">Live runs today: ${{ '%.2f' % budget.spent_today }} of ${{ '%.2f' % budget.daily_budget }} budget used.</span></div>
-  <div id="error" class="error hidden"></div>
+  <div class="run-row"><button class="btn primary" id="run">Check the report <span aria-hidden="true">→</span></button><span class="note">NVIDIA Nemotron on Nebius</span></div>
+  <details class="live-limits"><summary>About this demo</summary><p class="note">Currently supports curl. Live runs are limited per visitor and per day. ${{ '%.2f' % budget.spent_today }} of today's ${{ '%.2f' % budget.daily_budget }} budget used. This checker reads code; sandbox reproduction is available separately through the CLI.</p></details>
+  <div id="error" class="error hidden" role="alert"></div>
 </div>
 
-<div id="progress" class="hidden" style="margin-top:18px">
-  <h2 class="report-title" id="live-title" style="font-size:22px"></h2>
+<div id="progress" class="hidden" aria-live="polite" style="margin-top:24px">
+  <div class="section-heading"><h2 class="report-title" id="live-title" style="font-size:22px"></h2><span id="run-status" class="note">Checking the report…</span></div>
   <div class="timeline">
-    <div class="tl pending" data-stage="grounding"><div class="k">1 · Grounding</div><div class="v">no model</div><div class="d"></div></div>
-    <div class="tl pending" data-stage="claims"><div class="k">2 · Claims</div><div class="v">Nemotron 3 Nano</div><div class="d"></div></div>
-    <div class="tl pending" data-stage="evidence"><div class="k">3 · Evidence</div><div class="v">git + Tavily</div><div class="d"></div></div>
-    <div class="tl pending" data-stage="judgment"><div class="k">4 · Judgment</div><div class="v">Nemotron 3 Ultra</div><div class="d"></div></div>
-    <div class="tl pending" data-stage="receipts"><div class="k">5 · Receipts</div><div class="v">no model</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="grounding"><div class="k">1 · Check references</div><div class="v">Find the code</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="claims"><div class="k">2 · Read the report</div><div class="v">Identify the claims</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="evidence"><div class="k">3 · Gather evidence</div><div class="v">Read the source</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="judgment"><div class="k">4 · Check the claims</div><div class="v">Compare with code</div><div class="d"></div></div>
+    <div class="tl pending" data-stage="receipts"><div class="k">5 · Verify citations</div><div class="v">Check the answer</div><div class="d"></div></div>
   </div>
 </div>
 <div id="result"></div>

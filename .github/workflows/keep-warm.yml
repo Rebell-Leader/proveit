@@ -1,0 +1,14 @@
+# Keeps the free Render instance awake during the hackathon judging window so a judge's first click on live mode
+# does not wait ~60s for a cold start. It only GETs /healthz. Disable it after judging: delete this file, or turn
+# the workflow off in the repo's Actions tab. (Judge mode is static and always instant regardless.)
+name: keep-warm
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # every 10 minutes
+  workflow_dispatch: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the live server's health check
+        run: curl -fsS --max-time 90 https://proveit-live.onrender.com/healthz || true

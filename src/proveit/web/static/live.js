@@ -114,6 +114,12 @@ $("#run").addEventListener("click", async () => {
   $("#progress").classList.remove("hidden");
   $("#run").disabled = true;
   $("#run").textContent = "Checking…";
+  // The free server sleeps after a while; the first request after that spends up to a minute waking it. Tell the
+  // visitor that's what the wait is, rather than letting it look stuck. Cleared as soon as the first event arrives.
+  let seenEvent = false;
+  const waking = setTimeout(() => {
+    if (!seenEvent) $("#run-status").textContent = "Waking the live server — up to a minute on the free plan. Judge mode is instant.";
+  }, 4000);
   try {
     const resp = await fetch("/api/live", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (!resp.ok || !resp.body) throw new Error("The checker did not respond.");
@@ -130,13 +136,17 @@ $("#run").addEventListener("click", async () => {
         buffer = buffer.slice(cut + 2);
         const event = (chunk.match(/^event: (.+)$/m) || [])[1];
         const data = (chunk.match(/^data: (.+)$/m) || [])[1];
-        if (event && data && handlers[event]) handlers[event](JSON.parse(data));
+        if (event && data && handlers[event]) {
+          if (!seenEvent) { seenEvent = true; clearTimeout(waking); if ($("#run-status").textContent.startsWith("Waking")) $("#run-status").textContent = "Checking the report…"; }
+          handlers[event](JSON.parse(data));
+        }
       }
     }
     if (!finished) showError("The check ended before an answer arrived. Try again, or open a saved example from the overview.");
   } catch (err) {
     showError("The connection dropped. Your report is still here. Try again, or open a saved example from the overview.");
   } finally {
+    clearTimeout(waking);
     $("#run").disabled = false;
     $("#run").innerHTML = runLabel;
   }

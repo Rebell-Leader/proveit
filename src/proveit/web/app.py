@@ -187,9 +187,6 @@ async def live_run(request: Request):
             if not url and not (payload.get("body") or "").strip():
                 yield _sse("failed", {"message": "Paste the report text, or give a HackerOne URL."})
                 return
-            if not (CURL_DIR / ".git").exists():
-                yield _sse("failed", {"message": "Live mode is still warming up (fetching curl's source). Try again in a minute; judge mode works now."})
-                return
             # Admission (concurrency, daily dollars, per-visitor runs) before any outbound request or model call.
             refusal = budget.admit(ip)
             if refusal:

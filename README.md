@@ -8,10 +8,10 @@ repository at the revision the report targets, and tells the maintainer what che
 It is built on NVIDIA Nemotron models served by Nebius Token Factory.
 
 **Demo:** [judge mode](https://avaliev-proveit.static.hf.space) (197 curl reports, always on) ·
-[live mode](https://avaliev-proveit-live.hf.space/live) (check a report now; the server may take a minute to wake)
+[live mode](https://proveit-live.onrender.com/live) (check a report now; the server may take a minute to wake)
 
-> Status: day 3 of 5 (Nebius x NVIDIA Global AI Hackathon). The pipeline, held-out evaluation and web app work.
-> Deployment and the demo video come next.
+> Status: built for the Nebius x NVIDIA Global AI Hackathon. The pipeline, held-out evaluation, web app and both
+> deployments work. The demo video comes next.
 
 ## How it works
 
@@ -88,11 +88,12 @@ by showing the release version of each changed function with the commits in betw
 ```bash
 uv run uvicorn proveit.web.app:app --port 8000      # http://localhost:8000
 docker build -t proveit . && docker run -p 7860:7860 -e NEBIUS_API_KEY=... -e TAVILY_API_KEY=... proveit
-scripts/deploy_spaces.sh                            # both Hugging Face Spaces (see deploy/)
+scripts/deploy_static.sh                            # static judge mode to its Hugging Face Space
 ```
 
-Hosting: the static judge mode is a free static Hugging Face Space; live mode is a Gradio-SDK Space on ZeroGPU
-hardware running the same FastAPI app (`deploy/hf-live/app.py`). The models run on Token Factory, not on that GPU.
+Hosting: the static judge mode is a free static Hugging Face Space. Live mode is this Dockerfile on Render's free
+plan (`render.yaml`), which redeploys on every push to main and sleeps after 15 idle minutes. The models run on
+Token Factory, so neither host needs a GPU.
 
 ## Setup
 

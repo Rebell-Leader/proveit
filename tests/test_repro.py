@@ -10,8 +10,8 @@ def run(stdout="", stderr="", exit_code=0, timed_out=False):
                      seconds=1.0, cost=0.0, networking=False)
 
 
-ASAN_IN_CURL = ("AddressSanitizer: stack-overflow\n    #3 curl_mime_free /src/curl/lib/mime.c:1122\n"
-                "SUMMARY: AddressSanitizer: stack-overflow")
+ASAN_IN_CURL = ("==12==ERROR: AddressSanitizer: stack-overflow\n    #3 curl_mime_free /src/curl/lib/mime.c:1122\n"
+                "SUMMARY: AddressSanitizer: stack-overflow /src/curl/lib/mime.c:1088 in mime_subparts_unbind")
 
 
 def test_reproduced_needs_sanitizer_and_a_curl_frame():
@@ -20,20 +20,56 @@ def test_reproduced_needs_sanitizer_and_a_curl_frame():
 
 
 def test_sanitizer_without_a_curl_frame_is_not_reproduced():
-    r = run(stdout="PROVEIT_COMPILED", stderr="AddressSanitizer: heap-buffer-overflow\n    #0 main /tmp/poc.c:9")
+    r = run(stdout="PROVEIT_COMPILED",
+            stderr="==1==ERROR: AddressSanitizer: heap-buffer-overflow\n    #0 main /tmp/poc.c:9")
     assert classify(r, "c")["outcome"] == "crash_outside_curl"
 
 
+def test_crash_in_the_pocs_own_code_is_not_reproduced_despite_curl_calls():
+    # The PoC calls curl_easy_init but overflows its own buffer; the sanitizer frames are all in /tmp/poc.c.
+    out = ("==1==ERROR: AddressSanitizer: stack-buffer-overflow\n    #0 main /tmp/poc.c:14\n"
+           "    #1 0x4 in curl_easy_init\nSUMMARY: AddressSanitizer: stack-buffer-overflow /tmp/poc.c:14 in main")
+    assert classify(run(stdout="PROVEIT_COMPILED\nPOC_EXIT=1", stderr=out), "c")["outcome"] == "crash_outside_curl"
+
+
+def test_a_shell_poc_printing_the_word_sanitizer_is_not_reproduced():
+    # The bare word in narration must not count as a sanitizer report (it has no ERROR:/SUMMARY: prefix).
+    r = run(stdout=f"Checking libcurl with AddressSanitizer enabled\n/src/curl/lib/url.c looks fine\n{MARK_OK}")
+    assert classify(r, "shell")["outcome"] == "ran_clean"
+
+
 def test_poc_that_does_not_compile_is_fabricated_api():
-    r = run(stderr="/tmp/poc.c:9: error: implicit declaration of function 'curl_easy_pwn'")
+    r = run(stdout="PROVEIT_BUILD_FAILED", stderr="/tmp/poc.c:9: error: implicit declaration of function 'curl_easy_pwn'")
     out = classify(r, "c")
     assert out["outcome"] == "fabricated_api"
     assert "curl_easy_pwn" in out["missing_symbols"]
 
 
+def test_a_syntax_error_is_inconclusive_not_fabricated_api():
+    r = run(stdout="PROVEIT_BUILD_FAILED", stderr="/tmp/poc.c:9:1: error: expected ';' before '}' token")
+    assert classify(r, "c")["outcome"] == "inconclusive"
+
+
+def test_a_segfault_without_a_sanitizer_report_is_inconclusive_not_clean():
+    r = run(stdout=f"PROVEIT_COMPILED\nPOC_EXIT=139\n{MARK_OK}")
+    assert classify(r, "c")["outcome"] == "inconclusive"
+
+
+def test_truncated_output_without_the_marker_is_inconclusive():
+    r = run(stdout="PROVEIT_COMPILED\nlots of noise", stderr="more noise")
+    r.truncated = True
+    assert classify(r, "c")["outcome"] == "inconclusive"
+
+
 def test_clean_compiled_run_is_only_weak_evidence():
-    r = run(stdout=f"PROVEIT_COMPILED\nall good\n{MARK_OK}")
+    r = run(stdout=f"PROVEIT_COMPILED\nall good\nPOC_EXIT=0\n{MARK_OK}")
     assert classify(r, "c")["outcome"] == "ran_clean"
+
+
+def test_a_build_error_mentioning_the_marker_does_not_count_as_compiled():
+    # The compiler error text contains the marker as a substring, but never on its own line.
+    r = run(stdout="PROVEIT_BUILD_FAILED", stderr="note: in expansion of PROVEIT_COMPILED_GUARD near here")
+    assert classify(r, "c")["outcome"] == "inconclusive"
 
 
 def test_timeout_is_inconclusive():

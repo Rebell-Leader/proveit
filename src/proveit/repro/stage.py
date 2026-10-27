@@ -90,38 +90,60 @@ def build_script(spec: dict) -> str:
         b64 = base64.b64encode(spec["c_source"].encode()).decode()
         kb = spec.get("stack_kb") or 0
         limit = f"ulimit -s {kb}; " if 64 <= kb <= 8192 else ""
+        # PROVEIT_COMPILED and POC_EXIT are printed on their own stdout lines; the compiler's own errors go to
+        # build.err and are echoed on failure, so classify matches these markers line-exactly, not as substrings.
         return (f"{RUN_ENV}\ncd /tmp\nprintf %s '{b64}' | base64 -d > poc.c\n"
-                f"if cc-curl -o poc poc.c 2> build.err; then echo PROVEIT_COMPILED; ({limit}./poc); else cat build.err; fi\n"
+                f"if cc-curl -o poc poc.c 2> build.err; then echo PROVEIT_COMPILED; ({limit}./poc); echo \"POC_EXIT=$?\";"
+                f" else echo PROVEIT_BUILD_FAILED; cat build.err; fi\n"
                 f"echo {MARK_OK}\n")
     return f"{RUN_ENV}\ncd /tmp\n{spec['shell']}\n"
 
 
-# A sanitizer report, and curl frames in its stack (not only the PoC's own main / harness).
-_SANITIZER = re.compile(r"(AddressSanitizer|runtime error:|ERROR: .*Sanitizer|SUMMARY: .*Sanitizer|heap-buffer-overflow|"
-                        r"stack-buffer-overflow|use-after-free|global-buffer-overflow)", re.I)
-_CURL_FRAME = re.compile(r"/src/curl/|libcurl|\bCurl_|curl_easy_|curl_url|curl_multi_|curl_ws_|lib/\w+\.c")
+# A real sanitizer REPORT, in its structured form (not the bare word, which a PoC could print). ASan prints
+# "ERROR: AddressSanitizer:" and "SUMMARY: AddressSanitizer:"; UBSan prints "<file>: runtime error:".
+_SANITIZER = re.compile(r"(ERROR: \w*Sanitizer:|SUMMARY: \w*Sanitizer:|: runtime error:)")
+# A frame compiled from curl's own source. The sanitizer symbolizes curl's frames to the build tree
+# /src/curl/lib/*.c; the PoC itself lives at /tmp/poc.c, so its own frames never match. A bare mention of a public
+# name like curl_easy_init is not enough: every PoC calls those, so matching them would flag a crash in the PoC's
+# own code as a curl bug.
+_CURL_FRAME = re.compile(r"/src/curl/(?:lib|src)/\w+\.c")
 _NO_SYMBOL = re.compile(r"undefined reference to [`']?(\w+)|implicit declaration of function [`']?(\w+)|"
                         r"unknown type name [`']?(\w+)|has no member named [`']?(\w+)", re.I)
+_POC_EXIT = re.compile(r"^POC_EXIT=(\d+)$", re.M)
 
 
 def classify(run: RunResult, language: str) -> dict:
-    """What the offline run shows about the report. Conservative: a clean run is only weak evidence."""
+    """What the offline run shows about the report. Conservative: a clean run is only weak evidence, and anything
+    that did not finish with a clear signal is inconclusive rather than clean."""
     out = f"{run.stdout}\n{run.stderr}"
+    lines = run.stdout.splitlines()
     sanitizer = bool(_SANITIZER.search(out))
     curl_frame = bool(_CURL_FRAME.search(out))
     missing = sorted({m for g in _NO_SYMBOL.findall(out) for m in g if m})
-    compiled = language != "c" or "PROVEIT_COMPILED" in run.stdout
+    compiled = language != "c" or "PROVEIT_COMPILED" in lines
+    m = _POC_EXIT.search(run.stdout)
+    poc_exit = int(m.group(1)) if m else None
     if run.timed_out:
         return {"outcome": "inconclusive", "detail": "the run hit the time limit", "sanitizer": sanitizer}
     if language == "c" and not compiled:
-        detail = (f"the PoC does not compile against real libcurl: missing {', '.join(missing[:6])}" if missing
-                  else "the PoC does not compile against real libcurl")
-        return {"outcome": "fabricated_api", "detail": detail, "missing_symbols": missing[:12], "sanitizer": False}
+        # Only a missing-symbol diagnostic shows a fabricated API; a plain syntax error or a build-env failure is
+        # the synthesizer's fault, not the report's, so it stays inconclusive.
+        if missing:
+            return {"outcome": "fabricated_api", "sanitizer": False, "missing_symbols": missing[:12],
+                    "detail": f"the PoC does not compile against real libcurl: missing {', '.join(missing[:6])}"}
+        return {"outcome": "inconclusive", "detail": "the PoC did not compile (no missing-symbol diagnostic)", "sanitizer": False}
     if sanitizer and curl_frame:
         return {"outcome": "reproduced", "detail": "AddressSanitizer/UBSan reported an error inside curl's code", "sanitizer": True}
     if sanitizer:
         return {"outcome": "crash_outside_curl", "detail": "a sanitizer fired, but the stack does not reach curl's code", "sanitizer": True}
-    if MARK_OK in run.stdout:
+    if language == "c" and poc_exit:
+        # The PoC built but exited non-zero (a signal gives 128+n) without any sanitizer report: a crash the
+        # sanitizer did not characterize, not a clean run.
+        how = f"was killed by signal {poc_exit - 128}" if poc_exit > 128 else f"exited {poc_exit}"
+        return {"outcome": "inconclusive", "detail": f"the PoC {how} without a sanitizer report", "sanitizer": False}
+    if run.truncated and MARK_OK not in run.stdout:
+        return {"outcome": "inconclusive", "detail": "the sandbox output was truncated before the run finished", "sanitizer": sanitizer}
+    if MARK_OK in lines or (language == "c" and poc_exit == 0):
         return {"outcome": "ran_clean", "detail": "the PoC built and ran against the real curl without a sanitizer error", "sanitizer": False}
     return {"outcome": "inconclusive", "detail": f"the run ended exit={run.exit_code} without a clear signal", "sanitizer": False}
 

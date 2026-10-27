@@ -29,8 +29,14 @@ def _reproductions(ids, rows) -> dict:
     out = {}
     for h1_id in ids:
         row = rows.get(h1_id)
-        if row:
-            out[h1_id] = reproduce(row["input"])
+        if not row:
+            continue
+        try:  # a sandbox outage must not abort the whole demo export; the report just shows no reproduction
+            result = reproduce(row["input"])
+            if result:
+                out[h1_id] = result
+        except Exception as e:
+            print(f"  reproduction for {h1_id} skipped: {type(e).__name__}: {e}")
     return out
 
 

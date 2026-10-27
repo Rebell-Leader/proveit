@@ -74,14 +74,30 @@ class Sandboxes:
     def whoami(self) -> dict:
         return self._json("GET", "v1/whoami")
 
+    def _cancel(self, op_id: str) -> None:
+        try:
+            self.http.delete(f"v1/operations/{op_id}")
+        except Exception:
+            pass  # best effort: the guest timeout still bounds the operation
+
     def _wait(self, op_id: str, deadline: float) -> dict:
-        delay = 1.0
+        delay, errors = 1.0, 0
         while True:
-            op = self._json("GET", f"v1/operations/{op_id}")
+            try:
+                op = self._json("GET", f"v1/operations/{op_id}")
+                errors = 0
+            except Exception:
+                # A transient poll error must not abandon a running (billable) operation: retry until the deadline.
+                errors += 1
+                if time.monotonic() > deadline or errors > 8:
+                    self._cancel(op_id)
+                    raise
+                time.sleep(min(delay * errors, 5.0))
+                continue
             if op.get("status") not in RUNNING:
                 return op
             if time.monotonic() > deadline:
-                self.http.delete(f"v1/operations/{op_id}")
+                self._cancel(op_id)
                 raise TimeoutError(f"Sandboxes operation {op_id} did not finish in time; it was cancelled")
             time.sleep(delay)
             delay = min(delay * 1.5, 5.0)

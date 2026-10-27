@@ -66,13 +66,22 @@ def curl_tag(tag: str) -> str:
     return f"proveit-curl-asan-{version_of(tag)}"
 
 
+# A version named as the one that fixes the bug ("fixed in 8.1.0", "patched in curl 8.2.0") is not the release to
+# test: testing it would run the patched code and miss the flaw.
+_FIXED_IN = re.compile(r"(?:fixed|patched|resolved|addressed|corrected)\s+(?:in|by|with)\s+(?:curl\s+)?v?(\d+\.\d+(?:\.\d+)?)", re.I)
+
+
 def target_release(repo: Repo, report: dict) -> str | None:
     """The release to reproduce against: the newest curl version the report names that was out when it was
-    submitted (reporters name the version they ran), else the latest release before the submission date."""
+    submitted (reporters name the version they ran), excluding any version the report calls the fix; else the
+    latest release before the submission date."""
     submitted = report.get("submitted_at") or dt.datetime.now(dt.UTC).isoformat()
     dates = dict(repo.release_tags())
+    text = f"{report.get('title', '')}\n{report.get('body', '')}"
     ex = extract(report.get("title", ""), report.get("body", ""))
-    named = [t for t in (repo.tag_for_version(v) for v in ex.versions) if t and dates.get(t, "9") <= submitted]
+    fixed = {repo.tag_for_version(v) for v in _FIXED_IN.findall(text)}
+    named = [t for t in (repo.tag_for_version(v) for v in ex.versions)
+             if t and t not in fixed and dates.get(t, "9") <= submitted]
     if named:
         return max(named, key=lambda t: tuple(int(x) for x in re.findall(r"\d+", t)))
     return repo.latest_release_before(submitted)

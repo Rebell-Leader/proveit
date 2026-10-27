@@ -16,6 +16,31 @@ VERDICTS = {
 }
 STATUS = {"supported": ("supported", "good"), "contradicted": ("contradicted", "bad"), "not_verifiable": ("not verifiable", "muted")}
 
+# Outcome of the Nebius-sandbox reproduction: (headline, tone, what it means).
+REPRO = {
+    "reproduced": ("Reproduced under AddressSanitizer", "good",
+                   "The report's proof of concept, built against this curl release and run offline, tripped a sanitizer inside curl's code."),
+    "fabricated_api": ("Proof of concept does not compile", "bad",
+                       "The proof of concept calls libcurl functions that do not exist in this release: it cannot be the real API."),
+    "crash_outside_curl": ("Crash, but not in curl", "warn",
+                           "A sanitizer fired, but the failing code was the report's own, not curl's."),
+    "ran_clean": ("Ran without tripping a sanitizer", "muted",
+                  "The proof of concept built and ran against the real curl without a memory error. This alone does not clear the report."),
+    "inconclusive": ("No clear signal offline", "muted",
+                     "The offline run neither crashed nor completed cleanly enough to decide."),
+}
+
+
+def _reproduction_view(r: dict | None) -> dict | None:
+    if not r or not r.get("attempted"):
+        return {"attempted": False, "reason": r.get("reason", "")} if r else None
+    headline, tone, explain = REPRO.get(r.get("outcome", ""), (r.get("outcome", "").replace("_", " "), "muted", ""))
+    return {"attempted": True, "headline": headline, "tone": tone, "explain": explain,
+            "outcome": r.get("outcome"), "version": r.get("version", ""), "language": r.get("language", ""),
+            "detail": r.get("detail", ""), "expected": r.get("expected", ""), "script": r.get("script", ""),
+            "stdout": r.get("stdout", ""), "stderr": r.get("stderr", ""), "missing_symbols": r.get("missing_symbols", []),
+            "sandbox_cost": r.get("sandbox_cost", 0)}
+
 
 def _snippet_lines(repo: Repo | None, ev: dict, fallback_rev: str | None) -> list[str]:
     if ev.get("lines"):
@@ -97,6 +122,7 @@ def to_view(result: dict, report: dict, *, h1_id: int | None = None, truth: dict
         "missing_info": judgment.get("missing_info", []),
         "reply": judgment.get("reply_to_reporter", ""),
         "code": code,
+        "reproduction": _reproduction_view(result.get("reproduction")),
         "citations": result.get("citations", {}),
         "stages": {k: {"model": v.get("model", "").split("/")[-1], "prompt_tokens": v.get("prompt_tokens", 0),
                        "completion_tokens": v.get("completion_tokens", 0), "seconds": v.get("seconds", 0),

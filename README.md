@@ -22,6 +22,13 @@ It is built on NVIDIA Nemotron models served by Nebius Token Factory.
 | 3. Evidence | deterministic code + **Tavily** | Fetches the real curl functions and cited lines, line-numbered; Tavily fetches the dependencies' own documentation when the report quotes it. |
 | 4. Judgment | **Nemotron 3 Ultra** (550B), reasoning on, ~$0.015 | Rules on each claim against the code it was shown: supported, contradicted or not verifiable, with line citations, a verdict and a draft reply. |
 | 5. Receipts | deterministic code | Every citation must point at code or a source the judge was shown, on a central claim; external quotes must appear verbatim in the fetched page. A verdict without receipts becomes "needs human". |
+| 6. Reproduction (optional) | **Nebius Sandboxes** | When the report ships a proof of concept that calls libcurl, ProveIt builds the exact curl release under AddressSanitizer in an isolated sandbox VM and runs the PoC **offline**. A sanitizer crash inside curl's code is a receipt the models cannot fake; a PoC that will not compile against the real API is one too. |
+
+Reproduction is the one stage that runs the reporter's code, so it runs only in a Nebius sandbox with networking
+disabled, never on the host. For CVE-2026-92391 it builds a 5000-deep MIME tree and calls `curl_mime_free`;
+AddressSanitizer catches the stack overflow in `lib/mime.c`, confirming the bug. Run it with
+`uv run proveit reproduce <id>` or `uv run proveit triage <id> --reproduce` (needs `NEBIUS_PROJECT_ID` in `.env`).
+It does not change the held-out numbers below: those are grounding plus the models only.
 
 Verdicts: `not_grounded` (fabricated references), `likely_invalid` (code contradicts the central claim),
 `policy_question` (behavior is real, the project's own "not security issues" policy may exclude it),
@@ -106,6 +113,7 @@ uv run proveit dataset            # fetches and labels the 197 curl reports (abo
 uv run proveit eval               # grounding checker over the dataset
 uv run proveit ground 2887487     # one report's grounding findings as JSON
 uv run proveit triage 2887487     # full triage: grounding, Nano claims, evidence, Ultra judgment, receipts
+uv run proveit reproduce 4024222  # build the targeted curl under ASan in a Nebius sandbox, run the PoC offline
 uv run proveit triage-eval --split dev   # full triage over a split, scored (responses are cached on disk)
 uv run proveit adversarial        # red-team reports (prompt injection, fake quotes...) through the real pipeline
 uv run proveit export-demo        # rebuild the web app's judge-mode data from runs/triage/

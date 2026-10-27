@@ -58,7 +58,42 @@
     <div class="v">{{ v.citations.valid or 0 }} of {{ (v.citations.valid or 0) + (v.citations.invalid or 0) }} citations verified</div>
     <div class="d">every citation must point at code the judge was shown</div>
   </div>
+  {% if v.reproduction and v.reproduction.attempted %}
+  <div class="tl done">
+    <div class="k">6 · Reproduction</div>
+    <div class="v">{{ v.reproduction.headline }}</div>
+    <div class="d">Nebius sandbox · curl {{ v.reproduction.version }} under AddressSanitizer, offline</div>
+  </div>
+  {% endif %}
 </div>
+
+{% if v.reproduction and v.reproduction.attempted %}
+<div class="panel repro {{ v.reproduction.tone }}">
+  <h3>Reproduction in a Nebius sandbox</h3>
+  <div class="big">{{ v.reproduction.headline }}</div>
+  <p>{{ v.reproduction.explain }}</p>
+  <p class="note">The report's proof of concept was compiled against curl {{ v.reproduction.version }}, built from source
+    with AddressSanitizer and UBSan, and run in an isolated VM with networking disabled. ProveIt never runs report
+    code on its own host.{% if v.reproduction.expected %} Expected: {{ v.reproduction.expected }}{% endif %}</p>
+  {% if v.reproduction.missing_symbols %}
+    <p>Missing from this libcurl: {% for s in v.reproduction.missing_symbols %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+  {% if v.reproduction.script %}
+    <details>
+      <summary>The script that ran ({{ v.reproduction.language }})</summary>
+      <pre class="repro-code">{{ v.reproduction.script }}</pre>
+    </details>
+  {% endif %}
+  {% if v.reproduction.stdout or v.reproduction.stderr %}
+    <details>
+      <summary>Sandbox output</summary>
+      <pre class="repro-code">{{ (v.reproduction.stdout ~ '\n' ~ v.reproduction.stderr) | trim }}</pre>
+    </details>
+  {% endif %}
+</div>
+{% elif v.reproduction and v.reproduction.reason %}
+<div class="panel"><p class="note"><b>Reproduction:</b> not attempted — {{ v.reproduction.reason }}.</p></div>
+{% endif %}
 
 <div class="cols">
   <div class="stack">

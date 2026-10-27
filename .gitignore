@@ -9,3 +9,7 @@ data/cache/
 vendor/
 runs/
 site/
+
+# Claude Code local state
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json

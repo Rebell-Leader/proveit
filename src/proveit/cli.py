@@ -79,9 +79,28 @@ def cmd_triage(args: argparse.Namespace) -> int:
     if not row:
         print(f"report {args.h1_id} is not in the dataset (or not public)", file=sys.stderr)
         return 1
-    result = triage(row["input"], thinking=not args.no_thinking)
+    result = triage(row["input"], thinking=not args.no_thinking, reproduce=args.reproduce)
     print(json.dumps(result, indent=2) if args.json else describe(result))
     print(f"\n[label, never shown to the models: {row['label']}]\nSpend this run: {tf.SPEND}", file=sys.stderr)
+    return 0
+
+
+def cmd_reproduce(args: argparse.Namespace) -> int:
+    from proveit import dataset
+    from proveit.repro.sandbox import configured
+    from proveit.repro.stage import reproduce
+
+    if not configured():
+        print("Set NEBIUS_API_KEY and NEBIUS_PROJECT_ID in .env (Sandboxes need the project ID).", file=sys.stderr)
+        return 1
+    rows = {r["h1_id"]: r for r in dataset.load()}
+    row = rows.get(args.h1_id)
+    if not row:
+        print(f"report {args.h1_id} is not in the dataset (or not public)", file=sys.stderr)
+        return 1
+    result = reproduce(row["input"], progress=lambda s, d: print(f"[{s}] {d.get('message') or d.get('tag') or d.get('outcome') or ''}", file=sys.stderr))
+    print(json.dumps(result, indent=2))
+    print(f"\n[label, never shown to the model: {row['label']}]", file=sys.stderr)
     return 0
 
 
@@ -158,7 +177,11 @@ def main() -> None:
     t.add_argument("h1_id", type=int)
     t.add_argument("--json", action="store_true")
     t.add_argument("--no-thinking", action="store_true", help="run the judge with reasoning off")
+    t.add_argument("--reproduce", action="store_true", help="also build the targeted curl under ASan in a Nebius sandbox and run the PoC offline")
     t.set_defaults(fn=cmd_triage)
+    rp = sub.add_parser("reproduce", help="build the targeted curl under ASan in a Nebius sandbox and run the report's PoC offline")
+    rp.add_argument("h1_id", type=int)
+    rp.set_defaults(fn=cmd_reproduce)
     sub.add_parser("adversarial", help="run the adversarial fixture reports through the full pipeline").set_defaults(fn=cmd_adversarial)
     te = sub.add_parser("triage-eval", help="run the full triage over a split and score it")
     te.add_argument("--split", choices=["dev", "test", "all"], default="dev")

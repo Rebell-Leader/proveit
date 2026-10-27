@@ -9,6 +9,9 @@ NVIDIA Nemotron on Nebius Token Factory.
 - `src/proveit/tf.py`: Token Factory client (OpenAI-compatible).
 - `src/proveit/dataset.py`: builds the labeled curl dataset (AI-slop vs. real CVE reports from HackerOne).
 - `src/proveit/grounding/`: deterministic checks. Do the files, lines, symbols and quoted code a report cites exist in the repo at the version it targets?
+- `src/proveit/judge/`: the model pipeline (Nano claims, evidence, Ultra judgment, receipts) in `pipeline.triage`.
+- `src/proveit/repro/`: optional reproduction in a Nebius sandbox. Builds the targeted curl release under AddressSanitizer and runs the report's PoC offline (networking disabled). `sandbox.py` (REST client), `images.py` (CMake build, cached as a tagged checkpoint; autotools fails in the sandbox), `stage.py` (synthesize and classify).
+- `src/proveit/web/`: FastAPI + Jinja app, judge mode (precomputed) and live mode (SSE).
 - `src/proveit/cli.py`: `uv run proveit <command>`.
 - `data/curl_reports.jsonl`: labels and IDs only. Fetched report text lives in `data/cache/` (gitignored).
 - `vendor/curl`: full curl clone with tags (gitignored). Create it with `uv run proveit fetch-repo`.

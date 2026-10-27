@@ -23,9 +23,11 @@ def _stage(c: tf.Completion) -> dict:
 
 
 def triage(report: dict, repo: Repo | None = None, *, thinking: bool = True, judge_model: str | None = None,
-           progress: Callable[[str, dict], None] | None = None) -> dict:
+           reproduce: bool = False, progress: Callable[[str, dict], None] | None = None) -> dict:
     """`report` is a dataset `input` dict: title, body, submitted_at. `progress(stage, data)` is called as each
-    stage finishes, for streaming UIs."""
+    stage finishes, for streaming UIs. `reproduce` additionally builds the targeted curl release under
+    AddressSanitizer in a Nebius sandbox and runs the report's proof of concept offline; the result is attached as
+    `reproduction` and does not change `final` (the frozen evaluation is grounding plus the models only)."""
     repo = repo or Repo()
     emit = progress or (lambda stage, data: None)
     t0 = time.monotonic()
@@ -69,8 +71,19 @@ def triage(report: dict, repo: Repo | None = None, *, thinking: bool = True, jud
     else:
         final = model_verdict
 
+    reproduction = None
+    if reproduce:
+        try:
+            from proveit.repro.stage import reproduce as run_repro
+            reproduction = run_repro(report, repo, claims=claims, progress=emit)
+        except Exception as e:  # a sandbox outage must never fail the triage
+            reproduction = {"attempted": False, "reason": f"the sandbox stage did not run ({type(e).__name__})"}
+        if reproduction:
+            emit("reproduction", reproduction)
+
     return {
         "final": final,
+        "reproduction": reproduction,
         "model_verdict": model_verdict,
         "judge_verdict": judgment.get("verdict"),
         "policy_section": judgment.get("policy_section", ""),
@@ -86,7 +99,7 @@ def triage(report: dict, repo: Repo | None = None, *, thinking: bool = True, jud
         "citations": {"valid": len(citations["valid"]), "invalid": len(citations["invalid"]),
                       "invalid_examples": citations["invalid"][:5], "bad_external_quotes": bad_quotes},
         "stages": {"claims": _stage(c), "judge": _stage(j)},
-        "cost": round(c.cost + j.cost, 5),
+        "cost": round(c.cost + j.cost + (reproduction.get("cost", 0.0) if reproduction else 0.0), 5),
         "seconds": round(time.monotonic() - t0, 1),
     }
 

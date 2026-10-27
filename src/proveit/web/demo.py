@@ -14,11 +14,30 @@ from proveit.web.view import to_view
 
 DEMO_DIR = DATA_DIR / "demo"
 RUNS = ("dev-v4", "test-v1")
+# Reports whose proof of concept is run offline in a Nebius sandbox and whose result is baked into the static demo.
+# 4024222 is CVE-2026-92391: its PoC, built against curl 8.22.0, overflows the stack inside curl_mime_free and
+# AddressSanitizer catches it. Needs sandbox access at export time (results cache on disk), so export skips it when
+# NEBIUS_PROJECT_ID is absent.
+REPRO_FEATURED = (4024222,)
 
 
-def export(runs: tuple[str, ...] = RUNS) -> dict:
+def _reproductions(ids, rows) -> dict:
+    from proveit.repro.sandbox import configured
+    if not configured():
+        return {}
+    from proveit.repro.stage import reproduce
+    out = {}
+    for h1_id in ids:
+        row = rows.get(h1_id)
+        if row:
+            out[h1_id] = reproduce(row["input"])
+    return out
+
+
+def export(runs: tuple[str, ...] = RUNS, reproduce_ids: tuple[int, ...] = REPRO_FEATURED) -> dict:
     rows = {r["h1_id"]: r for r in dataset.load()}
     repo = Repo()
+    repro = _reproductions(reproduce_ids, rows)
     (DEMO_DIR / "reports").mkdir(parents=True, exist_ok=True)
     index, summaries = [], {}
     for run in runs:
@@ -28,6 +47,8 @@ def export(runs: tuple[str, ...] = RUNS) -> dict:
             if not line.strip():
                 continue
             res = json.loads(line)
+            if res["h1_id"] in repro:
+                res["reproduction"] = repro[res["h1_id"]]
             row = rows[res["h1_id"]]
             truth = {"label": row["label"], "cve": row.get("cve", ""), "cve_summary": row.get("cve_summary", "")}
             view = to_view(res, row["input"], h1_id=res["h1_id"], truth=truth, repo=repo)

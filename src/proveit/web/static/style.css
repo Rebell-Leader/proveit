@@ -163,7 +163,7 @@ button.btn[disabled] { opacity: 0.5; cursor: progress; }
 .reasons li { margin: 4px 0; }
 
 /* Timeline: which model did what */
-.timeline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin-bottom: 18px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0; margin-bottom: 18px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
 .tl { padding: 12px 14px; border-right: 1px solid var(--line); min-width: 0; }
 .tl:last-child { border-right: 0; }
 .tl .k { font-size: 12px; color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -204,6 +204,19 @@ button.btn[disabled] { opacity: 0.5; cursor: progress; }
 .excerpt { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 360px; overflow: auto; color: var(--ink-2); }
 .quote { border-left: 3px solid var(--line); padding-left: 10px; color: var(--ink-2); font-size: 14px; margin: 6px 0; }
 .stack > * + * { margin-top: 14px; }
+
+/* Reproduction (Nebius sandbox) */
+.repro { border-left: 5px solid var(--muted); margin-bottom: 18px; }
+.repro.good { border-left-color: var(--good); }
+.repro.bad { border-left-color: var(--bad); }
+.repro.warn { border-left-color: var(--warn); }
+.repro .big { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; margin: 2px 0 6px; }
+.repro.good .big { color: var(--good); }
+.repro.bad .big { color: var(--bad); }
+.repro.warn .big { color: var(--warn); }
+.repro details { margin-top: 10px; }
+.repro details summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.repro-code { white-space: pre-wrap; overflow-x: auto; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); margin: 8px 0 0; max-height: 360px; overflow-y: auto; font-variant-ligatures: none; }
 
 /* Live */
 .live-form { display: grid; gap: 12px; }
